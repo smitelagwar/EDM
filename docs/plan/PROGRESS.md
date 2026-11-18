@@ -4,9 +4,9 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%74 (20 / 27 görev)`
-- **Aktif Faz:** `Faz 5 — Arayüzler: CLI, MCP, entegrasyonlar`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%100 (3/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%89 (24 / 27 görev)`
+- **Aktif Faz:** `Faz 6 — Kabul, belgeler, sürüm ve DUR`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%100 (3/3)` · Faz 5 `%100 (4/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
@@ -65,11 +65,11 @@
 - [x] **Faz 4 Kapısı:** Kapı komutları yeşil; L2b, L8, L11 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 5 — Arayüzler: CLI, MCP, entegrasyonlar
-- [ ] **T5.1** Tam CLI (`edm <subcommand>`, JSON stdout, çıkış kodları 0/1/2, 90 s bekçi)
-- [ ] **T5.2** MCP `stdio` sunucusu (20 sabit araç + `ImageContent`)
-- [ ] **T5.3** Kullanıcı başlatmalı loopback HTTP modu (`127.0.0.1` / `::1`, Bearer token, Origin kontrolü)
-- [ ] **T5.4** İstemci kılavuzları (Antigravity, Codex, Claude Code, Gemini CLI), `scripts/install.ps1` ve `SKILL.md`
-- [ ] **Faz 5 Kapısı:** Kapı komutları + `uv tool install --editable .` + `edm doctor` yeşil → `git push origin main`
+- [x] **T5.1** Tam CLI (`edm <subcommand>`, JSON stdout, çıkış kodları 0/1/2, 90 s bekçi) — 21a1f7c — 28 test yeşil; tüm §10.4 alt komutları, çıkış kodları ve bekçi eklendi.
+- [x] **T5.2** MCP `stdio` sunucusu (20 sabit araç + `ImageContent`) — 657c35c — 4 entegrasyon testi yeşil; §10.2'deki 23 araç ve base64 ImageContent eklendi.
+- [x] **T5.3** Kullanıcı başlatmalı loopback HTTP modu (`127.0.0.1` / `::1`, Bearer token, Origin kontrolü) — a99acaa — 5 entegrasyon testi yeşil; loopback ASGI, Bearer token ve Origin koruması eklendi.
+- [x] **T5.4** İstemci kılavuzları (Antigravity, Codex, Claude Code, Gemini CLI), `scripts/install.ps1` ve `SKILL.md` — be5c004 — 2 test yeşil; 4 istemci kılavuzu, install.ps1 ve SKILL.md eklendi.
+- [x] **Faz 5 Kapısı:** Kapı komutları + `uv tool install --editable .` + `edm doctor` yeşil → `git push origin main`
 
 ## Faz 6 — Kabul, belgeler, sürüm ve DUR
 - [ ] **T6.1** `scripts/run-live-acceptance.ps1`, kabul şablonu ve uygulama notları (`autocad`, `winrar`, `chrome`, `g-menu`)
