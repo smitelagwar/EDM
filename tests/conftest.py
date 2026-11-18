@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from ctypes import wintypes
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,33 @@ from edm.fakes import (
     fake_windows,
 )
 from edm.service import Edm
+from edm.win32.api import kernel32
+
+_EVENT_MODIFY_STATE = 0x0002
+_OpenEventW = kernel32.OpenEventW
+_OpenEventW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+_OpenEventW.restype = wintypes.HANDLE
+
+_ResetEvent = kernel32.ResetEvent
+_ResetEvent.argtypes = [wintypes.HANDLE]
+_ResetEvent.restype = wintypes.BOOL
+
+
+def _clear_abort_event() -> None:
+    handle = _OpenEventW(_EVENT_MODIFY_STATE, False, "Local\\EDM_ABORT")
+    if handle:
+        try:
+            _ResetEvent(handle)
+        finally:
+            kernel32.CloseHandle(handle)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_abort_event() -> Iterator[None]:
+    """Ensure Local\\EDM_ABORT does not leak across tests."""
+    _clear_abort_event()
+    yield
+    _clear_abort_event()
 
 
 @pytest.fixture
@@ -32,4 +61,5 @@ def fake_edm(tmp_path: Path) -> Edm:
         virtual_screen_provider=fake_virtual_screen,
         windows_provider=fake_windows,
         cursor_provider=fake_cursor_position,
+        popup_provider=lambda hwnd: hwnd,
     )

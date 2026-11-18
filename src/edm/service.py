@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
 from collections.abc import Callable
+from ctypes import wintypes
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
+from edm.actions.addressing import Address, resolve_point
+from edm.actions.guard import Guard
+from edm.actions.keys import (
+    chord_events,
+    key_state_events,
+    parse_chord,
+    unicode_events,
+)
+from edm.actions.killswitch import KillSwitch
+from edm.actions.mouse import (
+    click_events,
+    interpolate_path,
+    mouse_button_events,
+    wheel_events,
+)
+from edm.actions.waits import check_stale, wait_for_stable
 from edm.capture.base import CaptureBackend, Frame
 from edm.capture.gdi import GdiBackend, cursor_position
 from edm.capture.printwindow import PrintWindowBackend
@@ -28,17 +47,29 @@ from edm.fakes import (
 )
 from edm.geometry import CoordSpace, ImageMapping, Point, Rect
 from edm.observe.render import draw_cursor, draw_grid, encode_image, make_preview, zoom_crop
-from edm.observe.store import ObservationStore
+from edm.observe.store import Observation, ObservationStore
+from edm.win32.api import user32
 from edm.win32.dpi import ensure_dpi_awareness
+from edm.win32.input import InputSink, Win32InputSink
 from edm.win32.monitors import MonitorInfo, list_monitors, virtual_screen
+from edm.win32.process import Integrity, self_integrity
 from edm.win32.session import SessionInfo, get_session
 from edm.win32.windows import (
     WindowInfo,
     _matches_query,
     list_windows,
     parse_window_query,
+    root_window_at,
     select_window,
 )
+
+_GetLastActivePopup = user32.GetLastActivePopup
+_GetLastActivePopup.argtypes = [wintypes.HWND]
+_GetLastActivePopup.restype = wintypes.HWND
+
+
+def _win32_last_active_popup(hwnd: int) -> int:
+    return int(_GetLastActivePopup(hwnd) or 0)
 
 
 @dataclass(frozen=True)
@@ -91,12 +122,13 @@ class Edm:
         *,
         session_provider: Callable[[], SessionInfo] = get_session,
         capture_backends: dict[str, CaptureBackend] | None = None,
-        input_sink: Any = None,
+        input_sink: InputSink | None = None,
         clock: Callable[[], float] = time.time,
         monitors_provider: Callable[[], list[MonitorInfo]] = list_monitors,
         virtual_screen_provider: Callable[[], Rect] = virtual_screen,
         windows_provider: Callable[[], list[WindowInfo]] = list_windows,
         cursor_provider: Callable[[], Point | None] = cursor_position,
+        popup_provider: Callable[[int], int] = _win32_last_active_popup,
         store: ObservationStore | None = None,
     ) -> None:
         self.dpi_awareness = ensure_dpi_awareness()
@@ -107,6 +139,7 @@ class Edm:
         self._virtual_screen_provider = virtual_screen_provider
         self._windows_provider = windows_provider
         self._cursor_provider = cursor_provider
+        self._popup_provider = popup_provider
 
         if capture_backends is not None:
             self.capture_backends: dict[str, CaptureBackend] = dict(capture_backends)
@@ -116,7 +149,7 @@ class Edm:
                 "wgc": WgcBackend(self.cfg),
                 "printwindow": PrintWindowBackend(),
             }
-        self.input_sink = input_sink
+        self.input_sink: InputSink = input_sink if input_sink is not None else Win32InputSink()
         self.store = (
             store
             if store is not None
@@ -128,15 +161,53 @@ class Edm:
             virtual_screen_provider=self._virtual_screen_provider,
             monitors_provider=self._monitors_provider,
             window_resolver=self._resolve_window,
-            window_info_provider=self._window_info,
+            window_info_provider=self.window_info,
             hit_test_provider=self._hit_test,
         )
+        self.killswitch = KillSwitch(
+            self.cfg,
+            cursor_provider=self.input_sink.cursor_pos,
+            primary_origin=self._primary_origin(),
+        )
+        self.guard = Guard(
+            self.cfg,
+            session_provider=self.session_provider,
+            killswitch=self.killswitch,
+            integrity_at=self._integrity_at,
+            self_integrity=self._self_integrity(),
+        )
+
+    def _primary_origin(self) -> Point:
+        for mon in self._monitors_provider():
+            if mon.primary:
+                return Point(mon.rect.left, mon.rect.top)
+        return Point(0, 0)
+
+    def _self_integrity(self) -> Integrity:
+        if isinstance(self.input_sink, FakeInputSink):
+            return Integrity.medium
+        return self_integrity()
+
+    def _integrity_at(self, p: Point) -> Integrity:
+        if isinstance(self.input_sink, FakeInputSink):
+            for win in sorted(self._windows_provider(), key=lambda w: w.z_order):
+                if win.visible and not win.minimized and win.rect.contains(p):
+                    return win.integrity
+            return Integrity.medium
+        hwnd = root_window_at(p)
+        if hwnd == 0:
+            return Integrity.medium
+        for win in self._windows_provider():
+            if win.hwnd == hwnd:
+                return win.integrity
+        return Integrity.unknown
 
     def _resolve_window(self, query: str) -> tuple[WindowInfo, list[WindowInfo]]:
         wq = parse_window_query(query)
         return select_window(self._windows_provider(), wq)
 
-    def _window_info(self, hwnd: int) -> WindowInfo:
+    def window_info(self, hwnd: int) -> WindowInfo:
+        """Return ``WindowInfo`` for *hwnd* or raise ``WINDOW_NOT_FOUND``."""
         for win in self._windows_provider():
             if win.hwnd == hwnd:
                 return win
@@ -145,6 +216,10 @@ class Edm:
             f"Window not found: hwnd={hwnd}",
             details={"hwnd": hwnd},
         )
+
+    def last_active_popup(self, hwnd: int) -> int:
+        """Return the last active popup window handle for *hwnd*."""
+        return self._popup_provider(hwnd)
 
     def _hit_test(self, p: Point) -> int:
         for win in sorted(self._windows_provider(), key=lambda w: w.z_order):
@@ -165,6 +240,7 @@ class Edm:
                 virtual_screen_provider=fake_virtual_screen,
                 windows_provider=fake_windows,
                 cursor_provider=fake_cursor_position,
+                popup_provider=lambda hwnd: hwnd,
             )
         return cls(cfg)
 
@@ -241,7 +317,10 @@ class Edm:
         if grid:
             preview = draw_grid(preview)
 
-        win_dict = _window_to_dict(win) if win is not None else None
+        win_dict: dict[str, Any] | None = None
+        if win is not None:
+            win_dict = _window_to_dict(win)
+            win_dict["last_popup"] = self.last_active_popup(win.hwnd)
         obs = self.store.add(
             frame,
             preview,
@@ -380,3 +459,347 @@ class Edm:
             image=img_bytes,
             mime=mime,
         )
+
+    def _log_action(self, action: str, details: dict[str, Any]) -> None:
+        now = self.clock()
+        day = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+        logs_dir = self.cfg.data_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / f"actions-{day}.jsonl"
+        record = {"ts": now, "action": action, "ok": True, "details": details}
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def _settle_and_observe(
+        self,
+        action: str,
+        obs: Observation | None,
+        *,
+        observe: bool,
+        details: dict[str, Any],
+        warnings: list[str],
+    ) -> Result:
+        self._log_action(action, details)
+        if not observe:
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": action,
+                    "details": details,
+                    "warnings": warnings,
+                }
+            )
+
+        gdi = self.capture_backends.get("gdi")
+        if gdi is not None and gdi.available()[0]:
+            vs = self._virtual_screen_provider()
+            wait_for_stable(
+                lambda: gdi.capture_rect(vs).image,
+                self.cfg.settle_quiet_ms,
+                self.cfg.settle_timeout_ms,
+            )
+
+        target = obs.target if (obs is not None and obs.window is not None) else "screen"
+        shot = self.screenshot(target=target)
+        payload: dict[str, Any] = {
+            "ok": True,
+            "action": action,
+            "observation": shot.payload["observation"],
+            "details": {
+                **details,
+                "foreground_window": shot.payload["details"]["foreground_window"],
+            },
+            "warnings": warnings,
+        }
+        return Result(payload=payload, image=shot.image, mime=shot.mime)
+
+    def click(
+        self,
+        addr: Address,
+        button: str = "left",
+        count: int = 1,
+        modifiers: list[str] | None = None,
+        verify: bool = True,
+        observe: bool = True,
+    ) -> Result:
+        """Click at *addr* with preflight, stale checks, and optional observation."""
+        mod_vks = parse_chord("+".join(modifiers)) if modifiers else []
+        with self.guard.input_lock():
+            pt, obs, warnings = resolve_point(self, addr)
+            self.guard.preflight(pt)
+            if obs is not None:
+                check_stale(self, obs, pt, verify=verify)
+
+            try:
+                if mod_vks:
+                    self.input_sink.send(
+                        [ev for vk in mod_vks for ev in key_state_events(vk, "down")]
+                    )
+                self.input_sink.move_to(pt)
+                self.input_sink.send(click_events(button, count))
+            finally:
+                if mod_vks:
+                    self.input_sink.send(
+                        [ev for vk in reversed(mod_vks) for ev in key_state_events(vk, "up")]
+                    )
+
+            return self._settle_and_observe(
+                "click",
+                obs,
+                observe=observe,
+                details={"x": pt.x, "y": pt.y, "button": button, "count": count},
+                warnings=warnings,
+            )
+
+    def move_mouse(
+        self,
+        addr: Address,
+        verify: bool = True,
+        observe: bool = True,
+    ) -> Result:
+        """Move the mouse cursor to *addr*."""
+        with self.guard.input_lock():
+            pt, obs, warnings = resolve_point(self, addr)
+            self.guard.preflight(pt)
+            if obs is not None:
+                check_stale(self, obs, pt, verify=verify)
+            self.input_sink.move_to(pt)
+            return self._settle_and_observe(
+                "move_mouse",
+                obs,
+                observe=observe,
+                details={"x": pt.x, "y": pt.y},
+                warnings=warnings,
+            )
+
+    def drag(
+        self,
+        from_addr: Address,
+        to_addr: Address,
+        button: str = "left",
+        duration_ms: int = 300,
+        verify: bool = True,
+        observe: bool = True,
+    ) -> Result:
+        """Drag from *from_addr* to *to_addr* across 20 interpolated points."""
+        if duration_ms < 0:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "duration_ms must be non-negative.")
+        with self.guard.input_lock():
+            p1, obs1, w1 = resolve_point(self, from_addr)
+            p2, obs2, w2 = resolve_point(self, to_addr)
+            self.guard.preflight(p1)
+            self.guard.preflight(p2)
+            if obs1 is not None:
+                check_stale(self, obs1, p1, verify=verify)
+            if obs2 is not None and obs2.id != (obs1.id if obs1 else None):
+                check_stale(self, obs2, p2, verify=verify)
+
+            pts = interpolate_path([p1, p2], smooth=False, steps_per_segment=20)
+            step_sleep = (duration_ms / 1000.0) / max(1, len(pts) - 1)
+            try:
+                self.input_sink.move_to(pts[0])
+                self.input_sink.send(mouse_button_events(button, "down"))
+                for pt in pts[1:]:
+                    if self.killswitch.triggered():
+                        raise EdmError(
+                            ErrorCode.ABORTED_BY_USER,
+                            "Kill switch triggered during drag.",
+                        )
+                    self.input_sink.move_to(pt)
+                    if step_sleep > 0:
+                        time.sleep(step_sleep)
+            finally:
+                self.input_sink.release_held()
+
+            return self._settle_and_observe(
+                "drag",
+                obs1 or obs2,
+                observe=observe,
+                details={"from": [p1.x, p1.y], "to": [p2.x, p2.y], "button": button},
+                warnings=w1 + w2,
+            )
+
+    def draw_path(
+        self,
+        observation_id: str,
+        points: list[tuple[float, float]],
+        coord_space: CoordSpace = "pixel",
+        button: str = "left",
+        press_button: bool = True,
+        smooth: bool = False,
+        duration_ms: int = 600,
+        observe: bool = True,
+    ) -> Result:
+        """Move along up to 200 points in *observation_id*, optionally holding *button*."""
+        if not points or len(points) > 200:
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"draw_path requires 1 to 200 points, got {len(points)}.",
+                details={"count": len(points)},
+            )
+        if duration_ms < 0:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "duration_ms must be non-negative.")
+
+        with self.guard.input_lock():
+            obs = self.store.get(observation_id)
+            screen_pts = [obs.mapping.to_screen(x, y, coord_space) for x, y in points]
+            self.guard.preflight(screen_pts[0])
+            check_stale(self, obs, screen_pts[0], verify=True)
+
+            path = interpolate_path(screen_pts, smooth=smooth, steps_per_segment=6)
+            step_sleep = (duration_ms / 1000.0) / max(1, len(path) - 1)
+            try:
+                self.input_sink.move_to(path[0])
+                if press_button:
+                    self.input_sink.send(mouse_button_events(button, "down"))
+                for pt in path[1:]:
+                    if self.killswitch.triggered():
+                        raise EdmError(
+                            ErrorCode.ABORTED_BY_USER,
+                            "Kill switch triggered during draw_path.",
+                        )
+                    self.input_sink.move_to(pt)
+                    if step_sleep > 0:
+                        time.sleep(step_sleep)
+            finally:
+                self.input_sink.release_held()
+
+            return self._settle_and_observe(
+                "draw_path",
+                obs,
+                observe=observe,
+                details={"points": len(points), "interpolated": len(path), "smooth": smooth},
+                warnings=[],
+            )
+
+    def mouse_button(
+        self,
+        action: Literal["down", "up"],
+        button: str = "left",
+        addr: Address | None = None,
+        observe: bool = True,
+    ) -> Result:
+        """Press or release a mouse button, optionally moving to *addr* first."""
+        with self.guard.input_lock():
+            obs: Observation | None = None
+            warnings: list[str] = []
+            pt: Point | None = None
+            if addr is not None:
+                pt, obs, warnings = resolve_point(self, addr)
+            self.guard.preflight(pt)
+            if obs is not None and pt is not None:
+                check_stale(self, obs, pt, verify=True)
+            if pt is not None:
+                self.input_sink.move_to(pt)
+            self.input_sink.send(mouse_button_events(button, action))
+            return self._settle_and_observe(
+                "mouse_button",
+                obs,
+                observe=observe,
+                details={"action": action, "button": button},
+                warnings=warnings,
+            )
+
+    def key_state(
+        self,
+        key: str,
+        action: Literal["down", "up"],
+        observe: bool = True,
+    ) -> Result:
+        """Press or release a single key."""
+        vks = parse_chord(key)
+        if len(vks) != 1:
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"key_state requires a single key, got {key!r}.",
+            )
+        with self.guard.input_lock():
+            self.guard.preflight(None)
+            self.input_sink.send(key_state_events(vks[0], action))
+            return self._settle_and_observe(
+                "key_state",
+                None,
+                observe=observe,
+                details={"key": key, "action": action},
+                warnings=[],
+            )
+
+    def scroll(
+        self,
+        addr: Address,
+        dy: int = 0,
+        dx: int = 0,
+        verify: bool = True,
+        observe: bool = True,
+    ) -> Result:
+        """Scroll vertically (*dy*) or horizontally (*dx*) at *addr*."""
+        with self.guard.input_lock():
+            pt, obs, warnings = resolve_point(self, addr)
+            self.guard.preflight(pt)
+            if obs is not None:
+                check_stale(self, obs, pt, verify=verify)
+            self.input_sink.move_to(pt)
+            evs = wheel_events(dy=dy, dx=dx)
+            if evs:
+                self.input_sink.send(evs)
+            return self._settle_and_observe(
+                "scroll",
+                obs,
+                observe=observe,
+                details={"x": pt.x, "y": pt.y, "dy": dy, "dx": dx},
+                warnings=warnings,
+            )
+
+    def type_text(
+        self,
+        text: str,
+        interval_ms: int = 0,
+        observe: bool = True,
+    ) -> Result:
+        """Type Unicode *text* via ``KEYEVENTF_UNICODE``."""
+        if interval_ms < 0:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "interval_ms must be non-negative.")
+        with self.guard.input_lock():
+            self.guard.preflight(None)
+            evs = unicode_events(text)
+            if interval_ms == 0:
+                self.input_sink.send(evs)
+            else:
+                for i in range(0, len(evs), 2):
+                    self.input_sink.send(evs[i : i + 2])
+                    if i + 2 < len(evs):
+                        time.sleep(interval_ms / 1000.0)
+            return self._settle_and_observe(
+                "type_text",
+                None,
+                observe=observe,
+                details={"length": len(text)},
+                warnings=[],
+            )
+
+    def press_keys(
+        self,
+        keys: str | list[str],
+        repeat: int = 1,
+        observe: bool = True,
+    ) -> Result:
+        """Press a key chord string or a sequence of key chords *repeat* times."""
+        if repeat < 1:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "repeat must be >= 1.")
+        seq = [keys] if isinstance(keys, str) else list(keys)
+        if not seq:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "keys must not be empty.")
+        parsed = [parse_chord(ch) for ch in seq]
+
+        with self.guard.input_lock():
+            self.guard.preflight(None)
+            for _ in range(repeat):
+                for vks in parsed:
+                    self.input_sink.send(chord_events(vks))
+            return self._settle_and_observe(
+                "press_keys",
+                None,
+                observe=observe,
+                details={"keys": seq, "repeat": repeat},
+                warnings=[],
+            )
