@@ -16,6 +16,13 @@ dependencies = [
     "pillow>=13.0.0",
     "uiautomation>=2.0.29",
     "windows-capture>=2.0.1",
+    "winrt-runtime>=4.2.0",
+    "winrt-windows-foundation>=4!10.0.28000.2957",
+    "winrt-windows-foundation-collections>=4!10.0.28000.2957",
+    "winrt-windows-globalization>=4!10.0.28000.2957",
+    "winrt-windows-graphics-imaging>=4!10.0.28000.2957",
+    "winrt-windows-media-ocr>=4!10.0.28000.2957",
+    "winrt-windows-storage-streams>=4!10.0.28000.2957",
 ]
 
 [project.scripts]
