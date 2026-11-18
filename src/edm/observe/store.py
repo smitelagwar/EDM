@@ -25,10 +25,14 @@ _SECONDS_PER_DAY = 86400.0
 class FrameLike(Protocol):
     """Structural protocol matching ``edm.capture.base.Frame``."""
 
-    image: Image.Image
-    screen_rect: Rect
-    backend: str
-    captured_at: float
+    @property
+    def image(self) -> Image.Image: ...
+    @property
+    def screen_rect(self) -> Rect: ...
+    @property
+    def backend(self) -> str: ...
+    @property
+    def captured_at(self) -> float: ...
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import time
+from collections.abc import Callable
 from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Literal
@@ -12,9 +13,9 @@ from edm.capture.base import CaptureBackend, Frame, is_blank
 from edm.capture.occlusion import visible_fraction
 from edm.config import Config
 from edm.errors import EdmError, ErrorCode
-from edm.geometry import Rect
+from edm.geometry import Point, Rect
 from edm.win32.api import user32
-from edm.win32.monitors import list_monitors, virtual_screen
+from edm.win32.monitors import MonitorInfo, list_monitors, virtual_screen
 from edm.win32.windows import WindowInfo, resolve_window, root_window_at, window_info
 
 _SW_RESTORE = 9
@@ -103,9 +104,24 @@ def parse_target(s: str) -> CaptureTarget:
 class Capturer:
     """Selects and falls back across capture backends according to §7 strategy."""
 
-    def __init__(self, backends: dict[str, CaptureBackend], cfg: Config) -> None:
+    def __init__(
+        self,
+        backends: dict[str, CaptureBackend],
+        cfg: Config,
+        *,
+        virtual_screen_provider: Callable[[], Rect] | None = None,
+        monitors_provider: Callable[[], list[MonitorInfo]] | None = None,
+        window_resolver: Callable[[str], tuple[WindowInfo, list[WindowInfo]]] | None = None,
+        window_info_provider: Callable[[int], WindowInfo] | None = None,
+        hit_test_provider: Callable[[Point], int] | None = None,
+    ) -> None:
         self._backends = dict(backends)
         self._cfg = cfg
+        self._virtual_screen = virtual_screen_provider
+        self._monitors = monitors_provider
+        self._resolve_window = window_resolver
+        self._window_info = window_info_provider
+        self._hit_test = hit_test_provider
 
     def _require_backend(self, name: str) -> CaptureBackend:
         backend = self._backends.get(name)
@@ -132,11 +148,12 @@ class Capturer:
         """Capture *target* and return ``(Frame, WindowInfo | None)``."""
         if target.kind == "screen":
             gdi = self._require_backend("gdi")
-            return gdi.capture_rect(virtual_screen()), None
+            vs = self._virtual_screen() if self._virtual_screen is not None else virtual_screen()
+            return gdi.capture_rect(vs), None
 
         if target.kind == "monitor":
             assert target.monitor is not None
-            monitors = list_monitors()
+            monitors = self._monitors() if self._monitors is not None else list_monitors()
             matched = [m for m in monitors if m.index == target.monitor]
             if not matched:
                 raise EdmError(
@@ -154,7 +171,8 @@ class Capturer:
 
         # target.kind == "window"
         assert target.query is not None
-        win, _alts = resolve_window(target.query)
+        resolver = self._resolve_window if self._resolve_window is not None else resolve_window
+        win, _alts = resolver(target.query)
         if win.minimized:
             if not restore:
                 raise EdmError(
@@ -163,9 +181,11 @@ class Capturer:
                     details={"hwnd": win.hwnd, "title": win.title},
                 )
             _restore_window(win.hwnd)
-            win = window_info(win.hwnd)
+            info_fn = self._window_info if self._window_info is not None else window_info
+            win = info_fn(win.hwnd)
 
-        vis = visible_fraction(win.rect, {win.hwnd}, root_window_at)
+        hit_fn = self._hit_test if self._hit_test is not None else root_window_at
+        vis = visible_fraction(win.rect, {win.hwnd}, hit_fn)
         order = (
             ["gdi", "wgc", "printwindow"] if vis >= _OCCLUSION_THRESHOLD else ["wgc", "printwindow"]
         )
