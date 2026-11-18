@@ -4,9 +4,9 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%89 (24 / 27 görev)`
-- **Aktif Faz:** `Faz 6 — Kabul, belgeler, sürüm ve DUR`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%100 (3/3)` · Faz 5 `%100 (4/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%100 (27 / 27 görev)`
+- **Aktif Faz:** `Tamamlandı — v0.1.0-rc1 (DUR)`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%100 (3/3)` · Faz 5 `%100 (4/4)` · Faz 6 `%100 (3/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
@@ -72,19 +72,19 @@
 - [x] **Faz 5 Kapısı:** Kapı komutları + `uv tool install --editable .` + `edm doctor` yeşil → `git push origin main`
 
 ## Faz 6 — Kabul, belgeler, sürüm ve DUR
-- [ ] **T6.1** `scripts/run-live-acceptance.ps1`, kabul şablonu ve uygulama notları (`autocad`, `winrar`, `chrome`, `g-menu`)
-- [ ] **T6.2** `README.md` (EN), `README.tr.md` (TR), `CHANGELOG.md`, `SECURITY.md` güncellemesi
-- [ ] **T6.3** Sürüm etiketi (`v0.1.0` veya `v0.1.0-rc1`), `FINAL-REPORT.md`, `git push origin main --tags` → **DUR**
+- [x] **T6.1** `scripts/run-live-acceptance.ps1`, kabul şablonu ve uygulama notları (`autocad`, `winrar`, `chrome`, `g-menu`) — 47b5a88 — kabul betiği (kod 3 korumalı), şablon ve 4 uygulama notu eklendi.
+- [x] **T6.2** `README.md` (EN), `README.tr.md` (TR), `CHANGELOG.md`, `SECURITY.md` güncellemesi — a9d3d22 — 4 test yeşil; EN/TR README, CHANGELOG ve SECURITY belgeleri tamamlandı.
+- [x] **T6.3** Sürüm etiketi (`v0.1.0` veya `v0.1.0-rc1`), `FINAL-REPORT.md`, `git push origin main --tags` → **DUR** — 9c693cd — sürüm `0.1.0rc1`, `FINAL-REPORT.md` ve `v0.1.0-rc1` etiketi tamamlandı.
 
 ## Gerçek Uygulama Doğrulama Matrisi (Kullanıcı Oturumunda)
-- [ ] **M1** AutoCAD (DirectX tuval + zoom ile küçük ikon)
-- [ ] **M2** WinRAR (UIA diyalog + CLI önceliği)
-- [ ] **M3** Chrome (OS dosya diyaloğu + DOM ayrımı)
-- [ ] **M4** AOC G-Menu (UIPI tespiti + yönetici EDM ile kontrol)
-- [ ] **M5** UAC / Kilit ekranı tespiti
-- [ ] **M6** %125 / %150 DPI ölçekleme doğruluğu
-- [ ] **M7** Türkçe klavye + pano geri yükleme
-- [ ] **M8** İnsan gibi sürekli çizim / basılı tutma (Paint / AutoCAD)
+- [~] **M1** AutoCAD (DirectX tuval + zoom ile küçük ikon) — `LIVE-PENDING: isolated_desktop`
+- [~] **M2** WinRAR (UIA diyalog + CLI önceliği) — `LIVE-PENDING: isolated_desktop`
+- [~] **M3** Chrome (OS dosya diyaloğu + DOM ayrımı) — `LIVE-PENDING: isolated_desktop`
+- [~] **M4** AOC G-Menu (UIPI tespiti + yönetici EDM ile kontrol) — `LIVE-PENDING: isolated_desktop`
+- [~] **M5** UAC / Kilit ekranı tespiti — `LIVE-PENDING: isolated_desktop`
+- [~] **M6** %125 / %150 DPI ölçekleme doğruluğu — `LIVE-PENDING: isolated_desktop`
+- [~] **M7** Türkçe klavye + pano geri yükleme — `LIVE-PENDING: isolated_desktop`
+- [~] **M8** İnsan gibi sürekli çizim / basılı tutma (Paint / AutoCAD) — `LIVE-PENDING: isolated_desktop`
 
 ## Günlük / Deneme Notları
 *(3 deneme kuralı kapsamındaki hipotezler ve faz özetleri buraya işlenir.)*
