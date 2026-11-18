@@ -106,14 +106,19 @@ def set_text(s: str) -> None:
     finally:
         _GlobalUnlock(hmem)
 
-    _open_clipboard_with_retry()
+    transferred = False
     try:
-        _EmptyClipboard()
-        if not _SetClipboardData(_CF_UNICODETEXT, hmem):
-            _GlobalFree(hmem)
-            raise EdmError(ErrorCode.INTERNAL, "SetClipboardData failed.")
+        _open_clipboard_with_retry()
+        try:
+            _EmptyClipboard()
+            if not _SetClipboardData(_CF_UNICODETEXT, hmem):
+                raise EdmError(ErrorCode.INTERNAL, "SetClipboardData failed.")
+            transferred = True
+        finally:
+            _CloseClipboard()
     finally:
-        _CloseClipboard()
+        if not transferred:
+            _GlobalFree(hmem)
 
 
 def get_image() -> Image.Image | None:

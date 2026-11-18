@@ -59,7 +59,7 @@ from edm.win32.api import user32
 from edm.win32.dpi import ensure_dpi_awareness
 from edm.win32.input import InputSink, Win32InputSink
 from edm.win32.monitors import MonitorInfo, list_monitors, virtual_screen
-from edm.win32.process import Integrity, self_integrity
+from edm.win32.process import Integrity, integrity_rank, self_integrity
 from edm.win32.session import SessionInfo, get_session
 from edm.win32.windows import (
     WindowInfo,
@@ -830,16 +830,29 @@ class Edm:
         observe: bool = True,
     ) -> Result:
         """Perform a window management action on the window matching *window*."""
-        win, alts = self._resolve_window(window)
-        self._window_action_fn(win.hwnd, action, rect)
-        warnings = [f"Multiple windows matched; chose hwnd={win.hwnd}."] if alts else []
-        return self._settle_and_observe(
-            "window_action",
-            None,
-            observe=observe,
-            details={"hwnd": win.hwnd, "action": action},
-            warnings=warnings,
-        )
+        with self.guard.input_lock():
+            self.guard.preflight(None)
+            win, alts = self._resolve_window(window)
+            self_int = self._self_integrity()
+            if (
+                win.integrity == Integrity.unknown
+                and integrity_rank(self_int) <= integrity_rank(Integrity.medium)
+            ) or integrity_rank(win.integrity) > integrity_rank(self_int):
+                raise EdmError(
+                    ErrorCode.ELEVATION_REQUIRED,
+                    f"Target window hwnd={win.hwnd} is elevated (muhtemelen {win.integrity}); "
+                    "run EDM as Administrator.",
+                    details={"hwnd": win.hwnd, "target_integrity": str(win.integrity)},
+                )
+            self._window_action_fn(win.hwnd, action, rect)
+            warnings = [f"Multiple windows matched; chose hwnd={win.hwnd}."] if alts else []
+            return self._settle_and_observe(
+                "window_action",
+                None,
+                observe=observe,
+                details={"hwnd": win.hwnd, "action": action},
+                warnings=warnings,
+            )
 
     def launch(
         self,
@@ -850,7 +863,7 @@ class Edm:
         observe: bool = True,
     ) -> Result:
         """Resolve and launch *target*, optionally waiting for a new matching window."""
-        if timeout_s <= 0 or timeout_s > 60.0:
+        if not math.isfinite(timeout_s) or timeout_s <= 0 or timeout_s > 60.0:
             raise EdmError(
                 ErrorCode.INVALID_ARGUMENT,
                 f"timeout_s must be in (0, 60], got {timeout_s}.",
@@ -865,6 +878,7 @@ class Edm:
                     f"Invalid wait_window regex: {exc}",
                 ) from exc
 
+        self.guard.preflight(None)
         spec = resolve_launch_target(target)
         before_hwnds = {w.hwnd for w in self._windows_provider()}
         self._launcher_fn(spec, args)
