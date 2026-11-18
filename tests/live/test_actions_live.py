@@ -63,7 +63,7 @@ def test_click_accuracy(
     win, log_path, _proc = target_app
     ox, oy = _client_origin(win.hwnd)
     edm = Edm(Config(data_dir=tmp_path / "edm-data"))
-    shot = edm.screenshot(target=f"hwnd:{win.hwnd}" if False else f"window:hwnd:{win.hwnd}")
+    shot = edm.screenshot(target=f"window:hwnd:{win.hwnd}")
     obs = edm.store.get(shot.payload["observation"]["id"])
 
     targets = [(ox + 80, oy + 300), (ox + 150, oy + 320), (ox + 220, oy + 350)]
@@ -189,3 +189,36 @@ def test_draw_path_continuous(
     assert len([e for e in evs if e.get("event") == "mouse_down"]) == 1
     assert len([e for e in evs if e.get("event") == "mouse_up"]) == 1
     assert len([e for e in evs if e.get("event") == "drag_motion"]) >= 5
+
+
+@pytest.mark.live
+def test_killswitch_mid_sequence(
+    target_app: tuple[WindowInfo, Path, subprocess.Popen[str]],
+    tmp_path: Path,
+) -> None:
+    """L10: Setting Local\\EDM_ABORT mid-sequence aborts immediately with ABORTED_BY_USER."""
+    import threading
+
+    from edm.actions.sequence import Step
+
+    win, _log_path, _proc = target_app
+    ox, oy = _client_origin(win.hwnd)
+    edm = Edm(Config(data_dir=tmp_path / "edm-data"))
+
+    def _trigger() -> None:
+        time.sleep(0.15)
+        edm.killswitch.signal()
+
+    t = threading.Thread(target=_trigger, daemon=True)
+    t.start()
+    steps = [
+        Step("click", {"screen_x": ox + 80, "screen_y": oy + 300}),
+        Step("wait_for", {"kind": "stable", "timeout_s": 0.4}),
+        Step("click", {"screen_x": ox + 150, "screen_y": oy + 320}),
+        Step("click", {"screen_x": ox + 220, "screen_y": oy + 340}),
+    ]
+    res = edm.run_sequence(steps)
+    t.join(timeout=2.0)
+    assert res.payload["ok"] is False
+    assert res.payload["error"]["code"] == "ABORTED_BY_USER"
+    assert res.payload["details"]["completed"] < len(steps)

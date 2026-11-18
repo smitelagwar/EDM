@@ -30,6 +30,7 @@ from edm.actions.mouse import (
     mouse_button_events,
     wheel_events,
 )
+from edm.actions.sequence import Step, execute_sequence
 from edm.actions.waits import check_stale, wait_for_stable, wait_until
 from edm.actions.windowops import WindowActionName
 from edm.actions.windowops import window_action as win32_window_action
@@ -934,6 +935,7 @@ class Edm:
         target: str = "screen",
         query: str | None = None,
         timeout_s: float = 10.0,
+        observe: bool = True,
     ) -> Result:
         """Wait for a screen, window, or text condition up to *timeout_s* (<= 60 s)."""
         if not math.isfinite(timeout_s) or timeout_s <= 0 or timeout_s > 60.0:
@@ -954,17 +956,8 @@ class Edm:
                 self.cfg.settle_quiet_ms,
                 int(timeout_s * 1000),
             )
-            shot = self.screenshot(target=target)
-            return Result(
-                payload={
-                    "ok": True,
-                    "action": "wait_for",
-                    "observation": shot.payload["observation"],
-                    "details": {"kind": kind},
-                    "warnings": [],
-                },
-                image=shot.image,
-                mime=shot.mime,
+            return self._settle_and_observe(
+                "wait_for", None, observe=observe, details={"kind": kind}, warnings=[]
             )
         if kind == "change":
             parsed = parse_target(target)
@@ -978,17 +971,8 @@ class Edm:
                     ErrorCode.TIMEOUT,
                     f"Timed out after {timeout_s}s waiting for screen change.",
                 )
-            shot = self.screenshot(target=target)
-            return Result(
-                payload={
-                    "ok": True,
-                    "action": "wait_for",
-                    "observation": shot.payload["observation"],
-                    "details": {"kind": kind},
-                    "warnings": [],
-                },
-                image=shot.image,
-                mime=shot.mime,
+            return self._settle_and_observe(
+                "wait_for", None, observe=observe, details={"kind": kind}, warnings=[]
             )
         if kind in ("window", "window_gone"):
             if not query:
@@ -1013,17 +997,12 @@ class Edm:
                     f"Timed out after {timeout_s}s waiting for {kind} ({query!r}).",
                     details={"kind": kind, "query": query},
                 )
-            shot = self.screenshot(target="screen")
-            return Result(
-                payload={
-                    "ok": True,
-                    "action": "wait_for",
-                    "observation": shot.payload["observation"],
-                    "details": {"kind": kind, "query": query},
-                    "warnings": [],
-                },
-                image=shot.image,
-                mime=shot.mime,
+            return self._settle_and_observe(
+                "wait_for",
+                None,
+                observe=observe,
+                details={"kind": kind, "query": query},
+                warnings=[],
             )
         raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Unsupported wait_for kind: {kind!r}")
 
@@ -1065,3 +1044,11 @@ class Edm:
                 }
             )
         raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Unsupported clipboard op: {op!r}")
+
+    def run_sequence(
+        self,
+        steps: list[Step] | list[dict[str, Any]],
+        stop_on_error: bool = True,
+    ) -> Result:
+        """Validate and execute a multi-step action sequence."""
+        return execute_sequence(self, steps, stop_on_error=stop_on_error)

@@ -172,6 +172,10 @@ def build_parser() -> argparse.ArgumentParser:
     cl_p.add_argument("op", choices=["get", "set"])
     cl_p.add_argument("--text", default=None)
 
+    sq_p = subparsers.add_parser("seq", help="Execute a JSON sequence of steps.")
+    sq_p.add_argument("--steps", required=True, help="JSON list of {tool, args} steps.")
+    sq_p.add_argument("--continue-on-error", action="store_true")
+
     return parser
 
 
@@ -279,6 +283,14 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
         )
     if args.command == "clip":
         return edm.clipboard(args.op, text=args.text)
+    if args.command == "seq":
+        try:
+            raw_steps = json.loads(args.steps)
+        except json.JSONDecodeError as exc:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Invalid JSON steps: {exc}") from exc
+        if not isinstance(raw_steps, list):
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "steps must be a JSON list.")
+        return edm.run_sequence(raw_steps, stop_on_error=not args.continue_on_error)
     return None
 
 

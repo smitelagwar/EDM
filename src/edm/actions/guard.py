@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from ctypes import wintypes
@@ -73,6 +74,7 @@ class Guard:
         self._killswitch = killswitch
         self._integrity_at = integrity_at
         self._self_integrity = self_integrity
+        self._lock_local = threading.local()
 
     def preflight(self, point: Point | None) -> None:
         """Verify desktop session, kill switch, and UIPI integrity before sending input."""
@@ -126,7 +128,16 @@ class Guard:
 
     @contextmanager
     def input_lock(self, timeout_s: float | None = None) -> Iterator[None]:
-        """Acquire the cross-process ``Local\\EDM_INPUT_LOCK`` mutex for the duration."""
+        """Acquire the cross-process ``Local\\EDM_INPUT_LOCK`` mutex (re-entrant per thread)."""
+        depth = int(getattr(self._lock_local, "depth", 0))
+        if depth > 0:
+            self._lock_local.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._lock_local.depth = depth
+            return
+
         effective_timeout = self._cfg.input_lock_timeout_s if timeout_s is None else timeout_s
         timeout_ms = max(0, int(round(effective_timeout * 1000)))
         handle = _CreateMutexW(None, False, _INPUT_LOCK_NAME)
@@ -143,7 +154,11 @@ class Guard:
             wait_res = int(_WaitForSingleObject(handle, timeout_ms))
             if wait_res in (_WAIT_OBJECT_0, _WAIT_ABANDONED):
                 acquired = True
-                yield
+                self._lock_local.depth = 1
+                try:
+                    yield
+                finally:
+                    self._lock_local.depth = 0
             elif wait_res == _WAIT_TIMEOUT:
                 raise EdmError(
                     ErrorCode.BUSY,
