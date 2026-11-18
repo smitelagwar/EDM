@@ -4,9 +4,9 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%26 (7 / 27 görev)`
-- **Aktif Faz:** `Faz 2 — Yakalama motoru ve gözlemler`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%41 (11 / 27 görev)`
+- **Aktif Faz:** `Faz 3 — Eylem motoru ve güvenlik`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
@@ -30,14 +30,14 @@
 - [x] **Faz 1 Kapısı:** Kapı komutları yeşil + `Ortam` tablosu güncellendi → `git push origin main`
 
 ## Faz 2 — Yakalama motoru ve gözlemler
-- [ ] **T2.1** GDI arka ucu (`mss`), boş kare tespiti ve `tests/live/target_app.py`
-- [ ] **T2.2** Örtülme hesabı, WGC (`windows-capture`), `PrintWindow` ve arka uç seçici (`Capturer`)
-- [ ] **T2.3** Gözlem deposu (`ObservationStore`), önizleme küçültme/JPEG basamakları, ızgara, zoom
-- [ ] **T2.4** `screenshot`, `zoom`, `list_monitors`, `list_windows` servis yöntemleri ve CLI
-- [ ] **L1** `test_gdi_pixel_colors`
-- [ ] **L2** `test_window_capture_size`
-- [ ] **L3** `test_occluded_window_uses_wgc_or_printwindow`
-- [ ] **Faz 2 Kapısı:** Kapı komutları yeşil; L1–L3 PASS veya `LIVE-PENDING` → `git push origin main`
+- [x] **T2.1** GDI arka ucu (`mss`), boş kare tespiti ve `tests/live/target_app.py` — c970843 — 3 birim + 1 canlı (skip) test; GdiBackend, is_blank ve target_app eklendi.
+- [x] **T2.2** Örtülme hesabı, WGC (`windows-capture`), `PrintWindow` ve arka uç seçici (`Capturer`) — 6e065b7 / 631424a — 9 birim + 2 canlı (skip) test; WGC Win10 border yedeği ve PrintWindow DWM kırpması doğrulandı.
+- [x] **T2.3** Gözlem deposu (`ObservationStore`), önizleme küçültme/JPEG basamakları, ızgara, zoom — 236d5e0 — 14 test yeşil; ObservationStore, JPEG/PNG basamaklı kodlama ve zoom eklendi.
+- [x] **T2.4** `screenshot`, `zoom`, `list_monitors`, `list_windows` servis yöntemleri ve CLI — f8f30c3 / 88f83dc — 8 test yeşil; service facade, CLI alt komutları ve fake sağlayıcılar eklendi.
+- [~] **L1** `test_gdi_pixel_colors` — `LIVE-PENDING: isolated_desktop`
+- [~] **L2** `test_window_capture_size` — `LIVE-PENDING: isolated_desktop`
+- [~] **L3** `test_occluded_window_uses_wgc_or_printwindow` — `LIVE-PENDING: isolated_desktop`
+- [x] **Faz 2 Kapısı:** Kapı komutları yeşil; L1–L3 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 3 — Eylem motoru ve güvenlik
 - [ ] **T3.1** Tuş/fare olay üretimi (`VkKeyScanW`, UTF-16 Unicode) ve `Win32InputSink`
