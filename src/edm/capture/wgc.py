@@ -40,12 +40,6 @@ class WgcBackend:
             details={"backend": self.name, "rect": rect.as_list()},
         )
 
-    def _create_capture(self, cls: Any, hwnd: int) -> Any:
-        try:
-            return cls(cursor_capture=False, draw_border=False, window_hwnd=hwnd)
-        except Exception:
-            return cls(cursor_capture=False, draw_border=None, window_hwnd=hwnd)
-
     def capture_window(self, hwnd: int) -> Frame:
         """Capture a single frame of *hwnd* via WGC within ``cfg.wgc_timeout_s``."""
         info = window_info(hwnd)
@@ -69,8 +63,6 @@ class WgcBackend:
         captured: list[Image.Image] = []
         errors: list[str] = []
 
-        capture = self._create_capture(WindowsCapture, hwnd)
-
         def on_frame_arrived(frame: Any, capture_control: Any) -> None:
             try:
                 buf = frame.frame_buffer
@@ -86,17 +78,29 @@ class WgcBackend:
         def on_closed() -> None:
             done.set()
 
-        capture.event(on_frame_arrived)
-        capture.event(on_closed)
+        ctrl: Any = None
+        last_exc: Exception | None = None
+        for draw_border in (False, None):
+            try:
+                capture = WindowsCapture(
+                    cursor_capture=False,
+                    draw_border=draw_border,
+                    window_hwnd=hwnd,
+                )
+                capture.event(on_frame_arrived)
+                capture.event(on_closed)
+                ctrl = capture.start_free_threaded()
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
 
-        try:
-            ctrl = capture.start_free_threaded()
-        except Exception as exc:
+        if last_exc is not None or ctrl is None:
             raise EdmError(
                 ErrorCode.CAPTURE_FAILED,
-                f"WGC failed to start capture for hwnd={hwnd}: {exc}",
+                f"WGC failed to start capture for hwnd={hwnd}: {last_exc}",
                 details={"backend": self.name, "hwnd": hwnd},
-            ) from exc
+            ) from last_exc
 
         finished = done.wait(timeout=self._cfg.wgc_timeout_s)
         if not finished:

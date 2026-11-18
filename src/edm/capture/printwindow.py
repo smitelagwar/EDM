@@ -11,7 +11,7 @@ from PIL import Image
 from edm.capture.base import Frame
 from edm.errors import EdmError, ErrorCode
 from edm.geometry import Rect
-from edm.win32.api import gdi32, user32
+from edm.win32.api import GetWindowRect, gdi32, user32
 from edm.win32.windows import window_info
 
 _PW_RENDERFULLCONTENT = 0x00000002
@@ -87,6 +87,15 @@ _GetDIBits.argtypes = [
 _GetDIBits.restype = ctypes.c_int
 
 
+def _get_window_rect(hwnd: int, fallback: Rect) -> Rect:
+    rc = wintypes.RECT()
+    if GetWindowRect(hwnd, ctypes.byref(rc)):
+        wr = Rect(int(rc.left), int(rc.top), int(rc.right), int(rc.bottom))
+        if wr.width > 0 and wr.height > 0:
+            return wr
+    return fallback
+
+
 class PrintWindowBackend:
     """Capture backend using ``user32.PrintWindow`` and ``GetDIBits``."""
 
@@ -105,7 +114,7 @@ class PrintWindowBackend:
         )
 
     def capture_window(self, hwnd: int) -> Frame:
-        """Capture *hwnd* via ``PrintWindow(..., PW_RENDERFULLCONTENT)``."""
+        """Capture *hwnd* via ``PrintWindow(..., PW_RENDERFULLCONTENT)`` aligned to DWM bounds."""
         info = window_info(hwnd)
         if info.minimized:
             raise EdmError(
@@ -113,13 +122,15 @@ class PrintWindowBackend:
                 f"Window {hwnd} is minimized and cannot be captured.",
                 details={"backend": self.name, "hwnd": hwnd},
             )
-        w, h = info.rect.width, info.rect.height
-        if w <= 0 or h <= 0:
+        if info.rect.width <= 0 or info.rect.height <= 0:
             raise EdmError(
                 ErrorCode.CAPTURE_FAILED,
                 f"Window {hwnd} has empty bounds: {info.rect}",
                 details={"backend": self.name, "hwnd": hwnd},
             )
+
+        wr = _get_window_rect(hwnd, info.rect)
+        bw, bh = wr.width, wr.height
 
         hdc_screen = _GetDC(0)
         if not hdc_screen:
@@ -135,7 +146,7 @@ class PrintWindowBackend:
             hdc_mem = _CreateCompatibleDC(hdc_screen)
             if not hdc_mem:
                 raise EdmError(ErrorCode.CAPTURE_FAILED, "CreateCompatibleDC failed.")
-            hbm = _CreateCompatibleBitmap(hdc_screen, w, h)
+            hbm = _CreateCompatibleBitmap(hdc_screen, bw, bh)
             if not hbm:
                 raise EdmError(ErrorCode.CAPTURE_FAILED, "CreateCompatibleBitmap failed.")
             old_obj = _SelectObject(hdc_mem, hbm)
@@ -149,29 +160,29 @@ class PrintWindowBackend:
 
             bmi = _BITMAPINFO()
             bmi.bmiHeader.biSize = ctypes.sizeof(_BITMAPINFOHEADER)
-            bmi.bmiHeader.biWidth = w
-            bmi.bmiHeader.biHeight = -h
+            bmi.bmiHeader.biWidth = bw
+            bmi.bmiHeader.biHeight = -bh
             bmi.bmiHeader.biPlanes = 1
             bmi.bmiHeader.biBitCount = 32
             bmi.bmiHeader.biCompression = _BI_RGB
 
-            buf = (ctypes.c_ubyte * (w * h * 4))()
+            buf = (ctypes.c_ubyte * (bw * bh * 4))()
             lines = _GetDIBits(
                 hdc_mem,
                 hbm,
                 0,
-                h,
+                bh,
                 ctypes.byref(buf),
                 ctypes.byref(bmi),
                 _DIB_RGB_COLORS,
             )
-            if lines != h:
+            if lines != bh:
                 raise EdmError(
                     ErrorCode.CAPTURE_FAILED,
-                    f"GetDIBits returned {lines} lines, expected {h}",
+                    f"GetDIBits returned {lines} lines, expected {bh}",
                     details={"backend": self.name, "hwnd": hwnd},
                 )
-            img = Image.frombuffer("RGB", (w, h), bytes(buf), "raw", "BGRX", 0, 1).copy()
+            img = Image.frombuffer("RGB", (bw, bh), bytes(buf), "raw", "BGRX", 0, 1).copy()
         finally:
             if hdc_mem and old_obj:
                 _SelectObject(hdc_mem, old_obj)
@@ -180,6 +191,14 @@ class PrintWindowBackend:
             if hdc_mem:
                 _DeleteDC(hdc_mem)
             _ReleaseDC(0, hdc_screen)
+
+        if wr != info.rect:
+            left = max(0, min(bw, info.rect.left - wr.left))
+            top = max(0, min(bh, info.rect.top - wr.top))
+            right = max(left, min(bw, info.rect.right - wr.left))
+            bottom = max(top, min(bh, info.rect.bottom - wr.top))
+            if right > left and bottom > top:
+                img = img.crop((left, top, right, bottom))
 
         return Frame(
             image=img,
