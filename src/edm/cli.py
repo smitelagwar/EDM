@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import threading
+from pathlib import Path
 
 from edm import __version__
 from edm.actions.addressing import Address
@@ -12,6 +15,9 @@ from edm.errors import EdmError, ErrorCode
 from edm.geometry import Rect
 from edm.service import Edm, Result
 from edm.win32.dpi import ensure_dpi_awareness
+
+_WATCHDOG_TIMEOUT_S = 90.0
+_LONG_RUNNING_COMMANDS = frozenset({"mcp", "serve-http"})
 
 
 def _add_address_args(p: argparse.ArgumentParser, prefix: str = "") -> None:
@@ -56,6 +62,21 @@ def _extract_address(args: argparse.Namespace, prefix: str = "") -> Address:
     )
 
 
+def _extract_optional_address(args: argparse.Namespace) -> Address | None:
+    addr = _extract_address(args)
+    if (
+        addr.observation_id is None
+        and addr.x is None
+        and addr.y is None
+        and addr.mark is None
+        and addr.text is None
+        and addr.screen_x is None
+        and addr.screen_y is None
+    ):
+        return None
+    return addr
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the top-level CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -79,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     shot_p.add_argument("--target", default="screen", help="Capture target.")
     shot_p.add_argument("--grid", action="store_true", help="Draw coordinate grid.")
     shot_p.add_argument("--no-cursor", action="store_true", help="Omit cursor crosshair.")
+    shot_p.add_argument("--marks", action="store_true", help="Draw UIA Set-of-Mark boxes.")
     shot_p.add_argument("--max-edge", type=int, default=None, help="Preview max edge.")
     shot_p.add_argument("--restore", action="store_true", help="Restore minimized window.")
 
@@ -91,6 +113,15 @@ def build_parser() -> argparse.ArgumentParser:
     zoom_p.add_argument("--norm1000", action="store_true", help="Normalized [0, 1000] coords.")
     zoom_p.add_argument("--fresh", action="store_true", help="Re-capture region via GDI.")
     zoom_p.add_argument("--factor", type=float, default=None, help="Zoom scale factor.")
+
+    el_p = subparsers.add_parser("elements", help="Collect UIA elements with Set-of-Mark.")
+    el_p.add_argument("--window", default=None, help="Window query selector.")
+    el_p.add_argument("--max-elements", type=int, default=150)
+
+    ft_p = subparsers.add_parser("find-text", help="Find text via offline Windows OCR.")
+    ft_p.add_argument("query", help="Text query or regex.")
+    ft_p.add_argument("--target", default="screen")
+    ft_p.add_argument("--match", default="contains", choices=["contains", "exact", "regex"])
 
     click_p = subparsers.add_parser("click", help="Click at an addressed point.")
     _add_address_args(click_p)
@@ -122,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     mb_p = subparsers.add_parser("mouse-btn", help="Press or release a mouse button.")
     mb_p.add_argument("action", choices=["down", "up"])
+    _add_address_args(mb_p)
     mb_p.add_argument("--button", default="left", choices=["left", "right", "middle"])
     mb_p.add_argument("--no-observe", action="store_true")
 
@@ -162,7 +194,7 @@ def build_parser() -> argparse.ArgumentParser:
     ln_p.add_argument("--timeout-s", type=float, default=30.0)
     ln_p.add_argument("--no-observe", action="store_true")
 
-    wt_p = subparsers.add_parser("wait", help="Wait for a screen or window condition.")
+    wt_p = subparsers.add_parser("wait", help="Wait for a screen, window, or text condition.")
     wt_p.add_argument("kind", choices=["change", "stable", "window", "window_gone", "text"])
     wt_p.add_argument("--target", default="screen")
     wt_p.add_argument("--query", default=None)
@@ -176,23 +208,67 @@ def build_parser() -> argparse.ArgumentParser:
     sq_p.add_argument("--steps", required=True, help="JSON list of {tool, args} steps.")
     sq_p.add_argument("--continue-on-error", action="store_true")
 
-    el_p = subparsers.add_parser("elements", help="Collect UIA elements with Set-of-Mark.")
-    el_p.add_argument("--window", default=None, help="Window query selector.")
-    el_p.add_argument("--max-elements", type=int, default=150)
-
-    ft_p = subparsers.add_parser("find-text", help="Find text via offline Windows OCR.")
-    ft_p.add_argument("query", help="Text query or regex.")
-    ft_p.add_argument("--target", default="screen")
-    ft_p.add_argument("--match", default="contains", choices=["contains", "exact", "regex"])
-
     sn_p = subparsers.add_parser("snip", help="Let the user draw a screen region.")
     sn_p.add_argument("--prompt", default=None)
     sn_p.add_argument("--timeout-s", type=float, default=120.0)
+    sn_p.add_argument("--list", action="store_true", help="List recent user snips.")
+    sn_p.add_argument("--limit", type=int, default=1)
+
+    subparsers.add_parser("prune", help="Prune expired or over-budget observations.")
+    subparsers.add_parser("mcp", help="Run the EDM MCP server over stdio.")
+
+    http_p = subparsers.add_parser("serve-http", help="Run loopback Streamable HTTP MCP server.")
+    http_p.add_argument("--host", default="127.0.0.1")
+    http_p.add_argument("--port", type=int, default=8765)
+    http_p.add_argument("--token-path", type=Path, default=None)
 
     return parser
 
 
+def _parse_points(raw: str) -> list[tuple[float, float]]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Invalid JSON points: {exc}") from exc
+    if not isinstance(parsed, list):
+        raise EdmError(ErrorCode.INVALID_ARGUMENT, "points must be a JSON list of [x, y].")
+    pts: list[tuple[float, float]] = []
+    for item in parsed:
+        try:
+            if not isinstance(item, list) or len(item) != 2:
+                raise TypeError("each point must be a 2-element list")
+            pts.append((float(item[0]), float(item[1])))
+        except (TypeError, ValueError, IndexError) as exc:
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"Invalid point element in --points: {item!r}",
+            ) from exc
+    return pts
+
+
 def _dispatch(args: argparse.Namespace) -> Result | None:
+    if args.command == "mcp":
+        try:
+            from edm.mcp_server import run_stdio  # type: ignore[import-not-found]
+        except ModuleNotFoundError as exc:
+            raise EdmError(
+                ErrorCode.DEPENDENCY_MISSING,
+                "MCP stdio server module is not available yet.",
+            ) from exc
+        run_stdio()
+        return None
+
+    if args.command == "serve-http":
+        try:
+            from edm.http_server import run_http  # type: ignore[import-not-found]
+        except ModuleNotFoundError as exc:
+            raise EdmError(
+                ErrorCode.DEPENDENCY_MISSING,
+                "HTTP server module is not available yet.",
+            ) from exc
+        run_http(host=args.host, port=args.port, token_path=args.token_path)
+        return None
+
     edm = Edm.build_default()
     if args.command == "doctor":
         return edm.doctor()
@@ -206,6 +282,7 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
             max_edge=args.max_edge,
             grid=args.grid,
             cursor=not args.no_cursor,
+            marks=args.marks,
             restore=args.restore,
         )
     if args.command == "zoom":
@@ -219,6 +296,10 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
             fresh=args.fresh,
             factor=args.factor,
         )
+    if args.command == "elements":
+        return edm.ui_elements(window=args.window, max_elements=args.max_elements)
+    if args.command == "find-text":
+        return edm.find_text(args.query, target=args.target, match=args.match)
     if args.command == "click":
         return edm.click(
             _extract_address(args),
@@ -238,13 +319,7 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
             observe=not args.no_observe,
         )
     if args.command == "draw-path":
-        try:
-            raw_pts = json.loads(args.points)
-        except json.JSONDecodeError as exc:
-            raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Invalid JSON points: {exc}") from exc
-        if not isinstance(raw_pts, list):
-            raise EdmError(ErrorCode.INVALID_ARGUMENT, "points must be a JSON list of [x, y].")
-        pts = [(float(p[0]), float(p[1])) for p in raw_pts]
+        pts = _parse_points(args.points)
         return edm.draw_path(
             args.obs,
             pts,
@@ -256,7 +331,12 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
             observe=not args.no_observe,
         )
     if args.command == "mouse-btn":
-        return edm.mouse_button(args.action, button=args.button, observe=not args.no_observe)
+        return edm.mouse_button(
+            args.action,
+            button=args.button,
+            addr=_extract_optional_address(args),
+            observe=not args.no_observe,
+        )
     if args.command == "key-state":
         return edm.key_state(args.key, args.action, observe=not args.no_observe)
     if args.command == "scroll":
@@ -304,12 +384,12 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
         if not isinstance(raw_steps, list):
             raise EdmError(ErrorCode.INVALID_ARGUMENT, "steps must be a JSON list.")
         return edm.run_sequence(raw_steps, stop_on_error=not args.continue_on_error)
-    if args.command == "elements":
-        return edm.ui_elements(window=args.window, max_elements=args.max_elements)
-    if args.command == "find-text":
-        return edm.find_text(args.query, target=args.target, match=args.match)
     if args.command == "snip":
+        if args.list:
+            return edm.get_user_snips(limit=args.limit)
         return edm.request_user_region(prompt=args.prompt, timeout_s=args.timeout_s)
+    if args.command == "prune":
+        return edm.prune()
     return None
 
 
@@ -328,14 +408,28 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command is not None:
         ensure_dpi_awareness()
+        watchdog: threading.Timer | None = None
+        if args.command not in _LONG_RUNNING_COMMANDS:
+            watchdog = threading.Timer(_WATCHDOG_TIMEOUT_S, lambda: os._exit(124))
+            watchdog.daemon = True
+            watchdog.start()
         try:
             result = _dispatch(args)
         except EdmError as exc:
             print(json.dumps(exc.to_payload(), ensure_ascii=False), file=sys.stderr)
             return 2
+        except Exception as exc:
+            internal = EdmError(ErrorCode.INTERNAL, str(exc))
+            print(json.dumps(internal.to_payload(), ensure_ascii=False), file=sys.stderr)
+            return 1
+        finally:
+            if watchdog is not None:
+                watchdog.cancel()
+
         if result is not None:
             print(json.dumps(result.payload, ensure_ascii=False))
-            return 0
+            return 0 if result.payload.get("ok", True) is not False else 2
+        return 0
 
     parser.print_help()
     return 0

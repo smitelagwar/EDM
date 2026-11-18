@@ -110,6 +110,8 @@ def validate_steps(edm: Edm, steps: list[Step]) -> None:
         if step.tool in ("click", "move_mouse", "scroll"):
             resolve_point(edm, _address_from_args(args))
             if step.tool == "click":
+                if args.get("button", "left") not in ("left", "right", "middle"):
+                    raise EdmError(ErrorCode.INVALID_ARGUMENT, "Invalid click button.")
                 count = args.get("count", 1)
                 if not isinstance(count, int) or count < 1:
                     raise EdmError(ErrorCode.INVALID_ARGUMENT, "click count must be >= 1.")
@@ -117,11 +119,15 @@ def validate_steps(edm: Edm, steps: list[Step]) -> None:
                 if mods:
                     parse_chord("+".join(mods))
         elif step.tool == "drag":
+            if args.get("button", "left") not in ("left", "right", "middle"):
+                raise EdmError(ErrorCode.INVALID_ARGUMENT, "Invalid drag button.")
             from_addr = _sub_address(args.get("from_addr", args.get("from")), "from_addr")
             to_addr = _sub_address(args.get("to_addr", args.get("to")), "to_addr")
             resolve_point(edm, from_addr)
             resolve_point(edm, to_addr)
         elif step.tool == "draw_path":
+            if args.get("button", "left") not in ("left", "right", "middle"):
+                raise EdmError(ErrorCode.INVALID_ARGUMENT, "Invalid draw_path button.")
             obs_id = args.get("observation_id")
             pts = args.get("points")
             if (
@@ -136,10 +142,19 @@ def validate_steps(edm: Edm, steps: list[Step]) -> None:
             obs = edm.store.get(obs_id)
             space = args.get("coord_space", "pixel")
             for p in pts:
-                obs.mapping.to_screen(float(p[0]), float(p[1]), space)
+                try:
+                    px, py = float(p[0]), float(p[1])
+                except (TypeError, ValueError, IndexError, KeyError) as exc:
+                    raise EdmError(
+                        ErrorCode.INVALID_ARGUMENT,
+                        f"Invalid point in draw_path: {p!r}",
+                    ) from exc
+                obs.mapping.to_screen(px, py, space)
         elif step.tool == "mouse_button":
             if args.get("action") not in ("down", "up"):
                 raise EdmError(ErrorCode.INVALID_ARGUMENT, "mouse_button action must be down/up.")
+            if args.get("button", "left") not in ("left", "right", "middle"):
+                raise EdmError(ErrorCode.INVALID_ARGUMENT, "Invalid mouse_button button.")
             if args.get("addr") is not None:
                 resolve_point(edm, _sub_address(args["addr"], "addr"))
         elif step.tool == "key_state":

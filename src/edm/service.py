@@ -575,7 +575,7 @@ class Edm:
                 self.cfg.settle_timeout_ms,
             )
 
-        target = obs.target if (obs is not None and obs.window is not None) else "screen"
+        target = obs.target if obs is not None else "screen"
         shot = self.screenshot(target=target)
         payload: dict[str, Any] = {
             "ok": True,
@@ -1324,6 +1324,19 @@ class Edm:
                 "action": "get_user_snips",
                 "snips": [s.to_public() for s in snips],
                 "details": {"count": len(snips)},
+                "warnings": [],
+            }
+        )
+
+    def prune(self) -> Result:
+        """Prune expired or over-budget observations from the store."""
+        deleted = self.store.prune()
+        return Result(
+            payload={
+                "ok": True,
+                "action": "prune",
+                "deleted": deleted,
+                "details": {"deleted": deleted},
                 "warnings": [],
             }
         )
