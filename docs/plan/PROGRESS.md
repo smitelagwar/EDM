@@ -4,9 +4,9 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%41 (11 / 27 görev)`
-- **Aktif Faz:** `Faz 3 — Eylem motoru ve güvenlik`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%63 (17 / 27 görev)`
+- **Aktif Faz:** `Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
@@ -40,20 +40,20 @@
 - [x] **Faz 2 Kapısı:** Kapı komutları yeşil; L1–L3 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 3 — Eylem motoru ve güvenlik
-- [ ] **T3.1** Tuş/fare olay üretimi (`VkKeyScanW`, UTF-16 Unicode) ve `Win32InputSink`
-- [ ] **T3.2** `Guard` (oturum, UIPI tespiti, `Local\EDM_INPUT_LOCK` mutex)
-- [ ] **T3.3** `KillSwitch` (`Ctrl+Alt+Shift+F12` + `Local\EDM_ABORT` + `(0,0)` köşe kilidi)
-- [ ] **T3.4** Adresleme, `diff`, `check_stale` (24×24 yama), `wait_for_stable`, fare/klavye araçları
-- [ ] **T3.5** `window_action`, `launch` (`ShellExecuteExW` / Start Menu / AUMID), `wait_for`, `clipboard`
-- [ ] **T3.6** Çok adımlı `run_sequence` (ön doğrulama, max 25 adım, her adımda killswitch + stale)
-- [ ] **L4** `test_click_accuracy`
-- [ ] **L5** `test_click_norm1000_accuracy`
-- [ ] **L6** `test_type_unicode`
-- [ ] **L7** `test_drag_and_scroll`
-- [ ] **L9** `test_stale_after_move`
-- [ ] **L10** `test_killswitch_mid_sequence`
-- [ ] **L12** `test_draw_path_continuous`
-- [ ] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9, L10, L12 PASS veya `LIVE-PENDING` → `git push origin main`
+- [x] **T3.1** Tuş/fare olay üretimi (`VkKeyScanW`, UTF-16 Unicode) ve `Win32InputSink` — f52aa34 — 12 test yeşil; klavye/fare olay üretici, Catmull-Rom yol ve SendInput sink eklendi.
+- [x] **T3.2** `Guard` (oturum, UIPI tespiti, `Local\EDM_INPUT_LOCK` mutex) — ad888ae — 8 test yeşil; oturum/killswitch/UIPI preflight ve mutex kilidi eklendi.
+- [x] **T3.3** `KillSwitch` (`Ctrl+Alt+Shift+F12` + `Local\EDM_ABORT` + `(0,0)` köşe kilidi) — 713fe72 — 5 test yeşil; global hotkey thread, ortak abort event ve köşe kilidi eklendi.
+- [x] **T3.4** Adresleme, `diff`, `check_stale` (24×24 yama), `wait_for_stable`, fare/klavye araçları — ab461a2 — 14 birim + 6 canlı (skip) test; adresleme, stale/diff ve tüm fare/klavye servis araçları eklendi.
+- [x] **T3.5** `window_action`, `launch` (`ShellExecuteExW` / Start Menu / AUMID), `wait_for`, `clipboard` — 2cee41b / cb66bd1 — 9 test yeşil (2 yeni guard/launch testi dahil); UIPI/preflight ve HGLOBAL temizliği doğrulandı.
+- [x] **T3.6** Çok adımlı `run_sequence` (ön doğrulama, max 25 adım, her adımda killswitch + stale) — f5e54f4 — 5 test yeşil; reentrant kilit, abort kesmesi ve release_held eklendi.
+- [~] **L4** `test_click_accuracy` — `LIVE-PENDING: isolated_desktop`
+- [~] **L5** `test_click_norm1000_accuracy` — `LIVE-PENDING: isolated_desktop`
+- [~] **L6** `test_type_unicode` — `LIVE-PENDING: isolated_desktop`
+- [~] **L7** `test_drag_and_scroll` — `LIVE-PENDING: isolated_desktop`
+- [~] **L9** `test_stale_after_move` — `LIVE-PENDING: isolated_desktop`
+- [~] **L10** `test_killswitch_mid_sequence` — `LIVE-PENDING: isolated_desktop`
+- [~] **L12** `test_draw_path_continuous` — `LIVE-PENDING: isolated_desktop`
+- [x] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9, L10, L12 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı
 - [ ] **T4.1** UIA öğe toplama (5 s zaman aşımı) ve Set-of-Mark (`marks`) numaralandırma
