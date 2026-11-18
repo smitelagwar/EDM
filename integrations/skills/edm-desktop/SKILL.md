@@ -64,4 +64,4 @@ For application-specific pitfalls and workflows, consult:
 - `docs/app-notes/autocad.md` (command line focus, modal dialogs, OSNAP, GPU viewport capture)
 - `docs/app-notes/winrar.md` (CLI `rar.exe` preference, UIA dialogs)
 - `docs/app-notes/chrome.md` (DOM tools vs native file dialogs)
-- `docs/app-notes/gmenu.md` (`ELEVATION_REQUIRED` handling for administrator utilities)
+- `docs/app-notes/g-menu.md` (`ELEVATION_REQUIRED` handling for administrator utilities)

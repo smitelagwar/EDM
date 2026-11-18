@@ -39,3 +39,31 @@ def test_install_script_has_no_default_writes() -> None:
         doc_path = REPO_ROOT / "docs" / "integrations" / doc_name
         assert doc_path.is_file()
         assert "edm" in doc_path.read_text(encoding="utf-8")
+
+
+def test_acceptance_package_and_app_notes() -> None:
+    runner_path = REPO_ROOT / "scripts" / "run-live-acceptance.ps1"
+    assert runner_path.is_file()
+    runner_text = runner_path.read_text(encoding="utf-8")
+    assert "exit 3" in runner_text
+    assert "-m live" in runner_text
+
+    template_path = REPO_ROOT / "docs" / "acceptance" / "TEMPLATE.md"
+    assert template_path.is_file()
+    tpl_text = template_path.read_text(encoding="utf-8")
+    assert "L1" in tpl_text and "L12" in tpl_text
+    assert "M1" in tpl_text and "M8" in tpl_text
+
+    for note_name in ("autocad.md", "winrar.md", "chrome.md", "g-menu.md"):
+        note_path = REPO_ROOT / "docs" / "app-notes" / note_name
+        assert note_path.is_file()
+        note_text = note_path.read_text(encoding="utf-8")
+        assert "Önerilen Yöntem" in note_text
+        assert "Bilinen Tuzak" in note_text
+        assert "Doğrulama Durumu" in note_text
+
+    skill_text = (REPO_ROOT / "integrations" / "skills" / "edm-desktop" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "docs/app-notes/g-menu.md" in skill_text
+    assert "docs/app-notes/gmenu.md" not in skill_text
