@@ -67,3 +67,25 @@ def test_acceptance_package_and_app_notes() -> None:
     )
     assert "docs/app-notes/g-menu.md" in skill_text
     assert "docs/app-notes/gmenu.md" not in skill_text
+
+
+def test_readme_changelog_and_security_docs() -> None:
+    readme_en = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_tr = (REPO_ROOT / "README.tr.md").read_text(encoding="utf-8")
+    changelog = REPO_ROOT / "CHANGELOG.md"
+    security = REPO_ROOT / "SECURITY.md"
+    assert changelog.is_file()
+    assert security.is_file()
+
+    for text in (readme_en, readme_tr):
+        assert "uv tool install" in text
+        assert "docs/integrations/antigravity.md" in text
+        assert "LOCALAPPDATA" in text
+        assert "MIT" in text
+        assert "draw_path" in text
+        assert "request_user_region" in text
+
+    assert "0.1.0" in changelog.read_text(encoding="utf-8")
+    sec_text = security.read_text(encoding="utf-8")
+    assert "Local\\EDM_ABORT" in sec_text
+    assert "127.0.0.1" in sec_text
