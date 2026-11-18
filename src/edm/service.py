@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import time
 from collections.abc import Callable
@@ -119,7 +120,7 @@ class Edm:
         self.store = (
             store
             if store is not None
-            else ObservationStore(self.cfg.data_dir / "observations", self.cfg, clock=self.clock)
+            else ObservationStore(self.cfg.data_dir, self.cfg, clock=self.clock)
         )
         self.capturer = Capturer(
             self.capture_backends,
@@ -277,6 +278,18 @@ class Edm:
     ) -> Result:
         """Zoom into a sub-region of an existing observation."""
         parent = self.store.get(observation_id)
+        if not all(math.isfinite(v) for v in (x, y, w, h)):
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Zoom coordinates and dimensions must be finite.",
+                details={"x": x, "y": y, "w": w, "h": h},
+            )
+        if factor is not None and (not math.isfinite(factor) or factor <= 0):
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"Zoom factor must be positive and finite, got {factor}.",
+                details={"factor": factor},
+            )
         if w <= 0 or h <= 0:
             raise EdmError(
                 ErrorCode.INVALID_ARGUMENT,
@@ -291,10 +304,10 @@ class Edm:
                     ErrorCode.POINT_OUT_OF_BOUNDS,
                     f"Normalized zoom box ({x}, {y}, {w}, {h}) exceeds [0, 1000].",
                 )
-            px_x = round(x / 1000.0 * pw)
-            px_y = round(y / 1000.0 * ph)
-            px_w = max(1, round(w / 1000.0 * pw))
-            px_h = max(1, round(h / 1000.0 * ph))
+            px_x = min(pw - 1, round(x / 1000.0 * pw))
+            px_y = min(ph - 1, round(y / 1000.0 * ph))
+            px_w = max(1, min(pw - px_x, round((x + w) / 1000.0 * pw) - px_x))
+            px_h = max(1, min(ph - px_y, round((y + h) / 1000.0 * ph) - px_y))
         elif coord_space == "pixel":
             px_x, px_y, px_w, px_h = round(x), round(y), round(w), round(h)
             if px_x < 0 or px_y < 0 or px_x + px_w > pw or px_y + px_h > ph:

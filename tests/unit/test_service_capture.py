@@ -22,6 +22,8 @@ def test_screenshot_payload(fake_edm: Edm) -> None:
     assert len(res.image) > 0
     assert res.mime in {"image/png", "image/jpeg"}
     assert "foreground_window" in res.payload["details"]
+    assert (fake_edm.cfg.data_dir / "index.jsonl").is_file()
+    assert not (fake_edm.cfg.data_dir / "observations" / "observations").exists()
 
 
 def test_zoom_maps_back(fake_edm: Edm) -> None:
@@ -60,6 +62,19 @@ def test_zoom_out_of_bounds_raises(fake_edm: Edm) -> None:
     with pytest.raises(EdmError) as exc_info:
         fake_edm.zoom(obs_id, 1590, 890, 50, 50)
     assert exc_info.value.code == ErrorCode.POINT_OUT_OF_BOUNDS
+
+
+def test_zoom_nan_and_norm1000_right_edge(fake_edm: Edm) -> None:
+    shot = fake_edm.screenshot(target="screen")
+    obs_id = shot.payload["observation"]["id"]
+
+    with pytest.raises(EdmError) as exc_info:
+        fake_edm.zoom(obs_id, float("nan"), 0, 10, 10)
+    assert exc_info.value.code == ErrorCode.INVALID_ARGUMENT
+
+    edge = fake_edm.zoom(obs_id, 999.9, 999.9, 0.1, 0.1, coord_space="norm1000")
+    assert edge.payload["ok"] is True
+    assert edge.payload["observation"]["parent_id"] == obs_id
 
 
 def test_list_windows_fake(fake_edm: Edm) -> None:
