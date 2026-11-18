@@ -364,8 +364,6 @@ class Edm:
         restore: bool = False,
     ) -> Result:
         """Capture *target*, persist observation, and return preview image bytes."""
-        if marks and target.startswith("window:"):
-            return self.ui_elements(window=target[7:])
         parsed = parse_target(target)
         frame, win = self.capturer.capture(parsed, restore=restore)
         edge = max_edge if max_edge is not None else self.cfg.preview_max_edge
@@ -1219,19 +1217,19 @@ class Edm:
         img_bytes, mime = encode_image(preview, self.cfg.max_image_bytes)
 
         ox, oy = frame.screen_rect.left, frame.screen_rect.top
-        match_dicts = [
-            {
-                "text": m.text,
-                "rect_image": m.rect_image.as_list(),
-                "rect_screen": [
-                    ox + m.rect_image.left,
-                    oy + m.rect_image.top,
-                    ox + m.rect_image.right,
-                    oy + m.rect_image.bottom,
-                ],
-            }
-            for m in matches
-        ]
+        match_dicts = []
+        for m in matches:
+            sx1, sy1 = ox + m.rect_image.left, oy + m.rect_image.top
+            sx2, sy2 = ox + m.rect_image.right, oy + m.rect_image.bottom
+            ix1, iy1 = mapping.from_screen(Point(sx1, sy1))
+            ix2, iy2 = mapping.from_screen(Point(sx2, sy2))
+            match_dicts.append(
+                {
+                    "text": m.text,
+                    "rect_image": [round(ix1), round(iy1), round(ix2), round(iy2)],
+                    "rect_screen": [sx1, sy1, sx2, sy2],
+                }
+            )
         return Result(
             payload={
                 "ok": True,

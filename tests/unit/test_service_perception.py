@@ -62,6 +62,39 @@ def test_find_text_and_address_text(fake_edm: Edm) -> None:
     assert exc_info.value.code == ErrorCode.WINDOW_NOT_FOUND
 
 
+def test_find_text_rect_image_maps_to_screen(fake_edm: Edm) -> None:
+    res = fake_edm.find_text("Tamam", target="screen", match="exact")
+    obs_id = res.payload["observation"]["id"]
+    r_img = res.payload["details"]["matches"][0]["rect_image"]
+    cx = (r_img[0] + r_img[2]) / 2.0
+    cy = (r_img[1] + r_img[3]) / 2.0
+
+    click_res = fake_edm.click(
+        Address(observation_id=obs_id, x=cx, y=cy),
+        verify=False,
+        observe=False,
+    )
+    assert click_res.payload["ok"] is True
+    pos = fake_edm.input_sink.cursor_pos()
+    assert abs(pos.x - 450) <= 1
+    assert abs(pos.y - 320) <= 1
+
+
+def test_screenshot_window_marks_preserves_options(fake_edm: Edm) -> None:
+    res = fake_edm.screenshot(
+        target="window:exe:fake.exe",
+        max_edge=800,
+        grid=True,
+        marks=True,
+    )
+    assert res.payload["ok"] is True
+    assert res.payload["action"] == "screenshot"
+    obs_dict = res.payload["observation"]
+    assert max(obs_dict["image_size"]) == 800
+    obs = fake_edm.store.get(obs_dict["id"])
+    assert len(obs.marks) >= 1
+
+
 def test_wait_for_text(fake_edm: Edm) -> None:
     res = fake_edm.wait_for("text", query="Tamam", timeout_s=1.0)
     assert res.payload["ok"] is True
