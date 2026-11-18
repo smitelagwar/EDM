@@ -254,13 +254,8 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
         return None
 
     if args.command == "serve-http":
-        try:
-            from edm.http_server import run_http  # type: ignore[import-not-found]
-        except ModuleNotFoundError as exc:
-            raise EdmError(
-                ErrorCode.DEPENDENCY_MISSING,
-                "HTTP server module is not available yet.",
-            ) from exc
+        from edm.http_server import run_http
+
         run_http(host=args.host, port=args.port, token_path=args.token_path)
         return None
 
