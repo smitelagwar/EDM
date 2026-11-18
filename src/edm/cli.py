@@ -248,13 +248,8 @@ def _parse_points(raw: str) -> list[tuple[float, float]]:
 
 def _dispatch(args: argparse.Namespace) -> Result | None:
     if args.command == "mcp":
-        try:
-            from edm.mcp_server import run_stdio  # type: ignore[import-not-found]
-        except ModuleNotFoundError as exc:
-            raise EdmError(
-                ErrorCode.DEPENDENCY_MISSING,
-                "MCP stdio server module is not available yet.",
-            ) from exc
+        from edm.mcp_server import run_stdio
+
         run_stdio()
         return None
 
