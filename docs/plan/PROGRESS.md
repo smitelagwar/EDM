@@ -4,15 +4,15 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%7 (2 / 27 görev)`
-- **Aktif Faz:** `Faz 1 — Win32 temel katman ve doctor`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%0 (0/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%26 (7 / 27 görev)`
+- **Aktif Faz:** `Faz 2 — Yakalama motoru ve gözlemler`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
 - **Ekran / GPU:** `2560x1440 primary, NVIDIA GeForce RTX 4060 + AMD Radeon(TM) Graphics`
 - **Python / uv:** `Python 3.12.14 / uv 0.12.5`
-- **`edm doctor` → `session.state`:** `TBD (Faz 1 / T1.5'te 1 kez ölçülüp yazılacak)`
+- **`edm doctor` → `session.state`:** `isolated_desktop (WinSta0\exebox-...)`
 
 ---
 
@@ -22,12 +22,12 @@
 - [x] **Faz 0 Kapısı:** `ruff` + `mypy` + `pytest` + CI yeşil → `git push origin main`
 
 ## Faz 1 — Win32 temel katman ve `doctor`
-- [ ] **T1.1** ctypes bağları ve Per-Monitor-V2 DPI farkındalığı
-- [ ] **T1.2** Oturum / masaüstü sınıflandırma (`WinSta0\Default` vs `exebox` vs `Winlogon`)
-- [ ] **T1.3** Geometri, `ImageMapping` (`pixel` / `norm1000` / zincirleme `zoom`) ve monitörler
-- [ ] **T1.4** Pencereler, süreç bütünlük düzeyi (`Integrity`) ve `tr_fold`
-- [ ] **T1.5** `doctor`, `service.Edm` iskeleti ve `fakes.py`
-- [ ] **Faz 1 Kapısı:** Kapı komutları yeşil + `Ortam` tablosu güncellendi → `git push origin main`
+- [x] **T1.1** ctypes bağları ve Per-Monitor-V2 DPI farkındalığı — e15d29f — 2 test yeşil; 6 Win32 DLL prototipi ve idempotent PMv2 DPI farkındalığı eklendi.
+- [x] **T1.2** Oturum / masaüstü sınıflandırma (`WinSta0\Default` vs `exebox` vs `Winlogon`) — b2f80e5 — 14 test yeşil; WinSta/Desktop/WTS oturum sınıflandırıcı eklendi.
+- [x] **T1.3** Geometri, `ImageMapping` (`pixel` / `norm1000` / zincirleme `zoom`) ve monitörler — 54a240f — 10 test yeşil; Rect/ImageMapping (hypothesis doğrulamalı) ve monitör listesi eklendi.
+- [x] **T1.4** Pencereler, süreç bütünlük düzeyi (`Integrity`) ve `tr_fold` — fab08e9 — 13 test yeşil; pencere sorgulama, Z-sırası seçimi, süreç bütünlüğü ve Türkçe katlama eklendi.
+- [x] **T1.5** `doctor`, `service.Edm` iskeleti ve `fakes.py` — 7d30429 — 3 test yeşil; `run_doctor`, `Edm` facade, sahte arka uçlar ve `edm doctor` CLI eklendi.
+- [x] **Faz 1 Kapısı:** Kapı komutları yeşil + `Ortam` tablosu güncellendi → `git push origin main`
 
 ## Faz 2 — Yakalama motoru ve gözlemler
 - [ ] **T2.1** GDI arka ucu (`mss`), boş kare tespiti ve `tests/live/target_app.py`
