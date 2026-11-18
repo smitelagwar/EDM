@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import time
 from collections.abc import Callable
 from ctypes import wintypes
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from edm.actions import clipboard as win32_clipboard
 from edm.actions.addressing import Address, resolve_point
 from edm.actions.guard import Guard
 from edm.actions.keys import (
@@ -21,13 +23,16 @@ from edm.actions.keys import (
     unicode_events,
 )
 from edm.actions.killswitch import KillSwitch
+from edm.actions.launch import LaunchSpec, resolve_launch_target, shell_execute
 from edm.actions.mouse import (
     click_events,
     interpolate_path,
     mouse_button_events,
     wheel_events,
 )
-from edm.actions.waits import check_stale, wait_for_stable
+from edm.actions.waits import check_stale, wait_for_stable, wait_until
+from edm.actions.windowops import WindowActionName
+from edm.actions.windowops import window_action as win32_window_action
 from edm.capture.base import CaptureBackend, Frame
 from edm.capture.gdi import GdiBackend, cursor_position
 from edm.capture.printwindow import PrintWindowBackend
@@ -38,6 +43,7 @@ from edm.doctor import run_doctor
 from edm.errors import EdmError, ErrorCode
 from edm.fakes import (
     FakeCaptureBackend,
+    FakeClipboard,
     FakeInputSink,
     FakeSession,
     fake_cursor_position,
@@ -46,6 +52,7 @@ from edm.fakes import (
     fake_windows,
 )
 from edm.geometry import CoordSpace, ImageMapping, Point, Rect
+from edm.observe.diff import patch_diff
 from edm.observe.render import draw_cursor, draw_grid, encode_image, make_preview, zoom_crop
 from edm.observe.store import Observation, ObservationStore
 from edm.win32.api import user32
@@ -129,6 +136,11 @@ class Edm:
         windows_provider: Callable[[], list[WindowInfo]] = list_windows,
         cursor_provider: Callable[[], Point | None] = cursor_position,
         popup_provider: Callable[[int], int] = _win32_last_active_popup,
+        clipboard_backend: Any = win32_clipboard,
+        window_action_fn: Callable[
+            [int, WindowActionName, Rect | None], None
+        ] = win32_window_action,
+        launcher_fn: Callable[[LaunchSpec, list[str] | None], None] = shell_execute,
         store: ObservationStore | None = None,
     ) -> None:
         self.dpi_awareness = ensure_dpi_awareness()
@@ -140,6 +152,9 @@ class Edm:
         self._windows_provider = windows_provider
         self._cursor_provider = cursor_provider
         self._popup_provider = popup_provider
+        self._clipboard_backend = clipboard_backend
+        self._window_action_fn = window_action_fn
+        self._launcher_fn = launcher_fn
 
         if capture_backends is not None:
             self.capture_backends: dict[str, CaptureBackend] = dict(capture_backends)
@@ -241,6 +256,9 @@ class Edm:
                 windows_provider=fake_windows,
                 cursor_provider=fake_cursor_position,
                 popup_provider=lambda hwnd: hwnd,
+                clipboard_backend=FakeClipboard(),
+                window_action_fn=lambda _hwnd, _act, _rect: None,
+                launcher_fn=lambda _spec, _args: None,
             )
         return cls(cfg)
 
@@ -803,3 +821,233 @@ class Edm:
                 details={"keys": seq, "repeat": repeat},
                 warnings=[],
             )
+
+    def window_action(
+        self,
+        window: str,
+        action: WindowActionName,
+        rect: Rect | None = None,
+        observe: bool = True,
+    ) -> Result:
+        """Perform a window management action on the window matching *window*."""
+        win, alts = self._resolve_window(window)
+        self._window_action_fn(win.hwnd, action, rect)
+        warnings = [f"Multiple windows matched; chose hwnd={win.hwnd}."] if alts else []
+        return self._settle_and_observe(
+            "window_action",
+            None,
+            observe=observe,
+            details={"hwnd": win.hwnd, "action": action},
+            warnings=warnings,
+        )
+
+    def launch(
+        self,
+        target: str,
+        args: list[str] | None = None,
+        wait_window: str | None = None,
+        timeout_s: float = 30.0,
+        observe: bool = True,
+    ) -> Result:
+        """Resolve and launch *target*, optionally waiting for a new matching window."""
+        if timeout_s <= 0 or timeout_s > 60.0:
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"timeout_s must be in (0, 60], got {timeout_s}.",
+            )
+        pattern: re.Pattern[str] | None = None
+        if wait_window is not None:
+            try:
+                pattern = re.compile(wait_window, re.IGNORECASE)
+            except re.error as exc:
+                raise EdmError(
+                    ErrorCode.INVALID_ARGUMENT,
+                    f"Invalid wait_window regex: {exc}",
+                ) from exc
+
+        spec = resolve_launch_target(target)
+        before_hwnds = {w.hwnd for w in self._windows_provider()}
+        self._launcher_fn(spec, args)
+
+        matched_win: WindowInfo | None = None
+        if pattern is not None:
+            deadline = time.monotonic() + timeout_s
+            stable_hwnd: int | None = None
+            stable_title: str | None = None
+            stable_since: float = 0.0
+            while time.monotonic() < deadline:
+                cands = [
+                    w
+                    for w in self._windows_provider()
+                    if w.hwnd not in before_hwnds and w.visible and pattern.search(w.title)
+                ]
+                if cands:
+                    cand = cands[0]
+                    if cand.hwnd == stable_hwnd and cand.title == stable_title:
+                        if time.monotonic() - stable_since >= 1.0:
+                            matched_win = cand
+                            break
+                    else:
+                        stable_hwnd = cand.hwnd
+                        stable_title = cand.title
+                        stable_since = time.monotonic()
+                else:
+                    stable_hwnd = None
+                    stable_title = None
+                time.sleep(0.1)
+            if matched_win is None:
+                raise EdmError(
+                    ErrorCode.TIMEOUT,
+                    f"Timed out after {timeout_s}s waiting for window matching {wait_window!r}.",
+                    details={"wait_window": wait_window},
+                )
+
+        details: dict[str, Any] = {
+            "spec": {"kind": spec.kind, "value": spec.value},
+            "window": _window_to_dict(matched_win) if matched_win is not None else None,
+        }
+        return self._settle_and_observe(
+            "launch",
+            None,
+            observe=observe,
+            details=details,
+            warnings=[],
+        )
+
+    def wait_for(
+        self,
+        kind: Literal["change", "stable", "window", "window_gone", "text"],
+        target: str = "screen",
+        query: str | None = None,
+        timeout_s: float = 10.0,
+    ) -> Result:
+        """Wait for a screen, window, or text condition up to *timeout_s* (<= 60 s)."""
+        if not math.isfinite(timeout_s) or timeout_s <= 0 or timeout_s > 60.0:
+            raise EdmError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"timeout_s must be in (0, 60], got {timeout_s}.",
+                details={"timeout_s": timeout_s},
+            )
+        if kind == "text":
+            raise EdmError(
+                ErrorCode.DEPENDENCY_MISSING,
+                "wait_for kind='text' is not yet available (pending T4.2 OCR engine).",
+            )
+        if kind == "stable":
+            parsed = parse_target(target)
+            wait_for_stable(
+                lambda: self.capturer.capture(parsed)[0].image,
+                self.cfg.settle_quiet_ms,
+                int(timeout_s * 1000),
+            )
+            shot = self.screenshot(target=target)
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "wait_for",
+                    "observation": shot.payload["observation"],
+                    "details": {"kind": kind},
+                    "warnings": [],
+                },
+                image=shot.image,
+                mime=shot.mime,
+            )
+        if kind == "change":
+            parsed = parse_target(target)
+            initial = self.capturer.capture(parsed)[0].image
+            ok = wait_until(
+                lambda: patch_diff(initial, self.capturer.capture(parsed)[0].image) > 0.002,
+                timeout_s,
+            )
+            if not ok:
+                raise EdmError(
+                    ErrorCode.TIMEOUT,
+                    f"Timed out after {timeout_s}s waiting for screen change.",
+                )
+            shot = self.screenshot(target=target)
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "wait_for",
+                    "observation": shot.payload["observation"],
+                    "details": {"kind": kind},
+                    "warnings": [],
+                },
+                image=shot.image,
+                mime=shot.mime,
+            )
+        if kind in ("window", "window_gone"):
+            if not query:
+                raise EdmError(
+                    ErrorCode.INVALID_ARGUMENT,
+                    f"wait_for kind={kind!r} requires query.",
+                )
+            wq = parse_window_query(query)
+            if kind == "window":
+                ok = wait_until(
+                    lambda: any(_matches_query(w, wq) for w in self._windows_provider()),
+                    timeout_s,
+                )
+            else:
+                ok = wait_until(
+                    lambda: not any(_matches_query(w, wq) for w in self._windows_provider()),
+                    timeout_s,
+                )
+            if not ok:
+                raise EdmError(
+                    ErrorCode.TIMEOUT,
+                    f"Timed out after {timeout_s}s waiting for {kind} ({query!r}).",
+                    details={"kind": kind, "query": query},
+                )
+            shot = self.screenshot(target="screen")
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "wait_for",
+                    "observation": shot.payload["observation"],
+                    "details": {"kind": kind, "query": query},
+                    "warnings": [],
+                },
+                image=shot.image,
+                mime=shot.mime,
+            )
+        raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Unsupported wait_for kind: {kind!r}")
+
+    def clipboard(
+        self,
+        op: Literal["get", "set"],
+        text: str | None = None,
+    ) -> Result:
+        """Get or set clipboard contents."""
+        if op == "get":
+            txt = self._clipboard_backend.get_text()
+            img = self._clipboard_backend.get_image()
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "clipboard",
+                    "op": "get",
+                    "text": txt,
+                    "has_image": img is not None,
+                    "details": {},
+                    "warnings": [],
+                }
+            )
+        if op == "set":
+            if text is None:
+                raise EdmError(
+                    ErrorCode.INVALID_ARGUMENT,
+                    "clipboard op='set' requires text.",
+                )
+            self._clipboard_backend.set_text(text)
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "clipboard",
+                    "op": "set",
+                    "length": len(text),
+                    "details": {},
+                    "warnings": [],
+                }
+            )
+        raise EdmError(ErrorCode.INVALID_ARGUMENT, f"Unsupported clipboard op: {op!r}")

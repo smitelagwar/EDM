@@ -1,5 +1,6 @@
 """Desktop input actions, safety guard, and kill switch."""
 
+from edm.actions import clipboard
 from edm.actions.keys import (
     KeyEvent,
     chord_events,
@@ -21,6 +22,7 @@ __all__ = [
     "MouseEvent",
     "chord_events",
     "click_events",
+    "clipboard",
     "interpolate_path",
     "key_state_events",
     "mouse_button_events",

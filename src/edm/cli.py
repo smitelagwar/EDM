@@ -9,6 +9,7 @@ import sys
 from edm import __version__
 from edm.actions.addressing import Address
 from edm.errors import EdmError, ErrorCode
+from edm.geometry import Rect
 from edm.service import Edm, Result
 from edm.win32.dpi import ensure_dpi_awareness
 
@@ -145,6 +146,32 @@ def build_parser() -> argparse.ArgumentParser:
     ky_p.add_argument("--repeat", type=int, default=1)
     ky_p.add_argument("--no-observe", action="store_true")
 
+    wa_p = subparsers.add_parser("window", help="Perform a window management action.")
+    wa_p.add_argument("target", help="Window query selector.")
+    wa_p.add_argument(
+        "action",
+        choices=["focus", "minimize", "maximize", "restore", "close", "move", "resize"],
+    )
+    wa_p.add_argument("--rect", nargs=4, type=int, metavar=("X", "Y", "W", "H"), default=None)
+    wa_p.add_argument("--no-observe", action="store_true")
+
+    ln_p = subparsers.add_parser("launch", help="Launch an application or URL.")
+    ln_p.add_argument("target", help="Path, URL, Start Menu shortcut, or app name.")
+    ln_p.add_argument("--args", nargs="*", default=None)
+    ln_p.add_argument("--wait-window", default=None)
+    ln_p.add_argument("--timeout-s", type=float, default=30.0)
+    ln_p.add_argument("--no-observe", action="store_true")
+
+    wt_p = subparsers.add_parser("wait", help="Wait for a screen or window condition.")
+    wt_p.add_argument("kind", choices=["change", "stable", "window", "window_gone", "text"])
+    wt_p.add_argument("--target", default="screen")
+    wt_p.add_argument("--query", default=None)
+    wt_p.add_argument("--timeout-s", type=float, default=10.0)
+
+    cl_p = subparsers.add_parser("clip", help="Get or set clipboard text.")
+    cl_p.add_argument("op", choices=["get", "set"])
+    cl_p.add_argument("--text", default=None)
+
     return parser
 
 
@@ -227,6 +254,31 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
     if args.command == "keys":
         chords = args.chords[0] if len(args.chords) == 1 else args.chords
         return edm.press_keys(chords, repeat=args.repeat, observe=not args.no_observe)
+    if args.command == "window":
+        rect = Rect.from_xywh(*args.rect) if args.rect is not None else None
+        return edm.window_action(
+            args.target,
+            args.action,
+            rect=rect,
+            observe=not args.no_observe,
+        )
+    if args.command == "launch":
+        return edm.launch(
+            args.target,
+            args=args.args,
+            wait_window=args.wait_window,
+            timeout_s=args.timeout_s,
+            observe=not args.no_observe,
+        )
+    if args.command == "wait":
+        return edm.wait_for(
+            args.kind,
+            target=args.target,
+            query=args.query,
+            timeout_s=args.timeout_s,
+        )
+    if args.command == "clip":
+        return edm.clipboard(args.op, text=args.text)
     return None
 
 

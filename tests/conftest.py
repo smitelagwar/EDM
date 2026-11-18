@@ -11,6 +11,7 @@ import pytest
 from edm.config import Config
 from edm.fakes import (
     FakeCaptureBackend,
+    FakeClipboard,
     FakeInputSink,
     FakeSession,
     fake_cursor_position,
@@ -62,4 +63,7 @@ def fake_edm(tmp_path: Path) -> Edm:
         windows_provider=fake_windows,
         cursor_provider=fake_cursor_position,
         popup_provider=lambda hwnd: hwnd,
+        clipboard_backend=FakeClipboard(),
+        window_action_fn=lambda _hwnd, _act, _rect: None,
+        launcher_fn=lambda _spec, _args: None,
     )

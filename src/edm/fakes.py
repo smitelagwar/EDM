@@ -213,3 +213,23 @@ class FakeInputSink:
             self.send(cleanup)
         self.held_buttons.clear()
         self.held_vks.clear()
+
+
+@dataclass
+class FakeClipboard:
+    """In-memory clipboard backend for unit tests."""
+
+    text: str | None = None
+    image: Image.Image | None = None
+
+    def get_text(self) -> str | None:
+        """Return fake clipboard text."""
+        return self.text
+
+    def set_text(self, s: str) -> None:
+        """Store fake clipboard text."""
+        self.text = s
+
+    def get_image(self) -> Image.Image | None:
+        """Return fake clipboard image."""
+        return self.image
