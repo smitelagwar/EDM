@@ -26,6 +26,9 @@ def test_wait_for_kinds_fake(fake_edm: Edm) -> None:
         fake_edm.wait_for("window_gone", query="exe:fake.exe", timeout_s=0.1)
     assert exc_info.value.code == ErrorCode.TIMEOUT
 
+    res_text = fake_edm.wait_for("text", query="Tamam", timeout_s=1.0)
+    assert res_text.payload["ok"] is True
+
     with pytest.raises(EdmError) as exc_text:
-        fake_edm.wait_for("text", query="Tamam", timeout_s=1.0)
-    assert exc_text.value.code == ErrorCode.DEPENDENCY_MISSING
+        fake_edm.wait_for("text", query="NotOnScreen", timeout_s=0.1)
+    assert exc_text.value.code == ErrorCode.TIMEOUT

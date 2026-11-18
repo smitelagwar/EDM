@@ -11,7 +11,6 @@ import pytest
 
 from edm.actions.addressing import Address
 from edm.config import Config
-from edm.perception.uia import collect_elements
 from edm.service import Edm
 from edm.win32.windows import WindowInfo
 
@@ -21,15 +20,23 @@ def test_uia_button_click(
     target_app: tuple[WindowInfo, Path, subprocess.Popen[str]],
     tmp_path: Path,
 ) -> None:
-    """L2b: Locate EDM-OK button via UIA and click its center."""
+    """L2b: Locate EDM-OK button via Edm.ui_elements and click by mark."""
     win, log_path, _proc = target_app
-    elements, _truncated = collect_elements(win.hwnd)
-    ok_btns = [e for e in elements if e.control_type == "Button" and e.name == "EDM-OK"]
+    edm = Edm(Config(data_dir=tmp_path / "edm-data"))
+    res = edm.ui_elements(window=f"hwnd:{win.hwnd}")
+    obs_id = res.payload["observation"]["id"]
+    ok_btns = [
+        e
+        for e in res.payload["details"]["elements"]
+        if e["control_type"] == "Button" and e["name"] == "EDM-OK"
+    ]
     assert len(ok_btns) == 1
 
-    center = ok_btns[0].rect.center
-    edm = Edm(Config(data_dir=tmp_path / "edm-data"))
-    edm.click(Address(screen_x=center.x, screen_y=center.y), observe=False)
+    edm.click(
+        Address(observation_id=obs_id, mark=ok_btns[0]["mark"]),
+        verify=False,
+        observe=False,
+    )
     time.sleep(0.2)
     lines = [
         json.loads(line)

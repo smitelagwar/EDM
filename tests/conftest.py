@@ -13,7 +13,10 @@ from edm.fakes import (
     FakeCaptureBackend,
     FakeClipboard,
     FakeInputSink,
+    FakeOcrEngine,
     FakeSession,
+    FakeSnipSelector,
+    FakeUiaProvider,
     fake_cursor_position,
     fake_monitors,
     fake_virtual_screen,
@@ -66,4 +69,7 @@ def fake_edm(tmp_path: Path) -> Edm:
         clipboard_backend=FakeClipboard(),
         window_action_fn=lambda _hwnd, _act, _rect: None,
         launcher_fn=lambda _spec, _args: None,
+        uia_provider=FakeUiaProvider(),
+        ocr_fn=FakeOcrEngine(),
+        snip_fn=FakeSnipSelector(),
     )

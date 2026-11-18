@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from PIL import Image
+
 from edm.actions import clipboard as win32_clipboard
 from edm.actions.addressing import Address, resolve_point
 from edm.actions.guard import Guard
@@ -46,7 +48,10 @@ from edm.fakes import (
     FakeCaptureBackend,
     FakeClipboard,
     FakeInputSink,
+    FakeOcrEngine,
     FakeSession,
+    FakeSnipSelector,
+    FakeUiaProvider,
     fake_cursor_position,
     fake_monitors,
     fake_virtual_screen,
@@ -54,8 +59,18 @@ from edm.fakes import (
 )
 from edm.geometry import CoordSpace, ImageMapping, Point, Rect
 from edm.observe.diff import patch_diff
-from edm.observe.render import draw_cursor, draw_grid, encode_image, make_preview, zoom_crop
-from edm.observe.store import Observation, ObservationStore
+from edm.observe.render import (
+    draw_cursor,
+    draw_grid,
+    draw_marks,
+    encode_image,
+    make_preview,
+    zoom_crop,
+)
+from edm.observe.store import Mark, Observation, ObservationStore
+from edm.perception.ocr import MatchMode, OcrLine, match_text, ocr_image
+from edm.perception.uia import Element, ElementProvider, collect_elements
+from edm.snip.overlay import run_snip
 from edm.win32.api import user32
 from edm.win32.dpi import ensure_dpi_awareness
 from edm.win32.input import InputSink, Win32InputSink
@@ -121,6 +136,27 @@ def _monitor_to_dict(mon: MonitorInfo) -> dict[str, Any]:
     }
 
 
+def _marks_in_image(marks: list[Mark], mapping: ImageMapping) -> list[tuple[int, Rect]]:
+    out: list[tuple[int, Rect]] = []
+    for m in marks:
+        x1, y1 = mapping.from_screen(Point(m.rect.left, m.rect.top))
+        x2, y2 = mapping.from_screen(Point(m.rect.right, m.rect.bottom))
+        out.append((m.id, Rect(round(x1), round(y1), round(x2), round(y2))))
+    return out
+
+
+def _element_to_dict(el: Element) -> dict[str, Any]:
+    return {
+        "mark": el.mark,
+        "name": el.name,
+        "control_type": el.control_type,
+        "rect": el.rect.as_list(),
+        "enabled": el.enabled,
+        "automation_id": el.automation_id,
+        "value": el.value,
+    }
+
+
 class Edm:
     """Facade coordinating session, capture, perception, and input backends."""
 
@@ -142,6 +178,9 @@ class Edm:
             [int, WindowActionName, Rect | None], None
         ] = win32_window_action,
         launcher_fn: Callable[[LaunchSpec, list[str] | None], None] = shell_execute,
+        uia_provider: ElementProvider | None = None,
+        ocr_fn: Callable[[Image.Image, str | None], list[OcrLine]] = ocr_image,
+        snip_fn: Callable[[Image.Image, Rect, str | None, float], Rect | None] = run_snip,
         store: ObservationStore | None = None,
     ) -> None:
         self.dpi_awareness = ensure_dpi_awareness()
@@ -156,6 +195,9 @@ class Edm:
         self._clipboard_backend = clipboard_backend
         self._window_action_fn = window_action_fn
         self._launcher_fn = launcher_fn
+        self._uia_provider = uia_provider
+        self._ocr_fn = ocr_fn
+        self._snip_fn = snip_fn
 
         if capture_backends is not None:
             self.capture_backends: dict[str, CaptureBackend] = dict(capture_backends)
@@ -260,6 +302,9 @@ class Edm:
                 clipboard_backend=FakeClipboard(),
                 window_action_fn=lambda _hwnd, _act, _rect: None,
                 launcher_fn=lambda _spec, _args: None,
+                uia_provider=FakeUiaProvider(),
+                ocr_fn=FakeOcrEngine(),
+                snip_fn=FakeSnipSelector(),
             )
         return cls(cfg)
 
@@ -319,7 +364,8 @@ class Edm:
         restore: bool = False,
     ) -> Result:
         """Capture *target*, persist observation, and return preview image bytes."""
-        del marks
+        if marks and target.startswith("window:"):
+            return self.ui_elements(window=target[7:])
         parsed = parse_target(target)
         frame, win = self.capturer.capture(parsed, restore=restore)
         edge = max_edge if max_edge is not None else self.cfg.preview_max_edge
@@ -329,6 +375,18 @@ class Edm:
             crop=Rect(0, 0, frame.image.width, frame.image.height),
             image_size=preview.size,
         )
+        obs_marks: list[Mark] = []
+        if marks and win is not None:
+            elements, _ = collect_elements(
+                win.hwnd,
+                timeout_s=self.cfg.uia_timeout_s,
+                provider=self._uia_provider,
+                screen_bounds=self._virtual_screen_provider(),
+            )
+            obs_marks = [Mark(id=e.mark, rect=e.rect, label=e.name) for e in elements]
+            marks_img = _marks_in_image(obs_marks, mapping)
+            if marks_img:
+                preview = draw_marks(preview, marks_img)
         if cursor:
             pos = self._cursor_provider()
             if pos is not None and frame.screen_rect.contains(pos):
@@ -346,6 +404,7 @@ class Edm:
             mapping,
             target=target,
             window=win_dict,
+            marks=obs_marks,
         )
         img_bytes, mime = encode_image(preview, self.cfg.max_image_bytes)
         return Result(
@@ -945,9 +1004,28 @@ class Edm:
                 details={"timeout_s": timeout_s},
             )
         if kind == "text":
-            raise EdmError(
-                ErrorCode.DEPENDENCY_MISSING,
-                "wait_for kind='text' is not yet available (pending T4.2 OCR engine).",
+            if not query:
+                raise EdmError(ErrorCode.INVALID_ARGUMENT, "wait_for kind='text' requires query.")
+            parsed = parse_target(target)
+
+            def _has_text() -> bool:
+                frame, _ = self.capturer.capture(parsed)
+                lines = self._ocr_fn(frame.image, None)
+                return bool(match_text(lines, query, match="contains"))
+
+            ok = wait_until(_has_text, timeout_s)
+            if not ok:
+                raise EdmError(
+                    ErrorCode.TIMEOUT,
+                    f"Timed out after {timeout_s}s waiting for text {query!r}.",
+                    details={"kind": kind, "query": query},
+                )
+            return self._settle_and_observe(
+                "wait_for",
+                None,
+                observe=observe,
+                details={"kind": kind, "query": query},
+                warnings=[],
             )
         if kind == "stable":
             parsed = parse_target(target)
@@ -1052,3 +1130,202 @@ class Edm:
     ) -> Result:
         """Validate and execute a multi-step action sequence."""
         return execute_sequence(self, steps, stop_on_error=stop_on_error)
+
+    def ui_elements(
+        self,
+        window: str | None = None,
+        max_elements: int = 150,
+    ) -> Result:
+        """Collect UIA interactive elements for *window* (or foreground) with Set-of-Mark."""
+        if window is not None:
+            win, _ = self._resolve_window(window)
+        else:
+            cands = [w for w in self._windows_provider() if w.visible and not w.minimized]
+            if not cands:
+                raise EdmError(ErrorCode.WINDOW_NOT_FOUND, "No visible window found.")
+            fg = [w for w in cands if w.foreground]
+            win = fg[0] if fg else sorted(cands, key=lambda w: w.z_order)[0]
+
+        target_str = f"window:hwnd:{win.hwnd}"
+        frame, _ = self.capturer.capture(parse_target(target_str))
+        elements, truncated = collect_elements(
+            win.hwnd,
+            max_elements=max_elements,
+            timeout_s=self.cfg.uia_timeout_s,
+            provider=self._uia_provider,
+            screen_bounds=self._virtual_screen_provider(),
+        )
+        preview = make_preview(frame.image, self.cfg.preview_max_edge)
+        mapping = ImageMapping(
+            frame_rect=frame.screen_rect,
+            crop=Rect(0, 0, frame.image.width, frame.image.height),
+            image_size=preview.size,
+        )
+        obs_marks = [Mark(id=e.mark, rect=e.rect, label=e.name) for e in elements]
+        marks_img = _marks_in_image(obs_marks, mapping)
+        if marks_img:
+            preview = draw_marks(preview, marks_img)
+
+        win_dict = _window_to_dict(win)
+        win_dict["last_popup"] = self.last_active_popup(win.hwnd)
+        obs = self.store.add(
+            frame,
+            preview,
+            mapping,
+            target=target_str,
+            window=win_dict,
+            marks=obs_marks,
+        )
+        img_bytes, mime = encode_image(preview, self.cfg.max_image_bytes)
+        return Result(
+            payload={
+                "ok": True,
+                "action": "ui_elements",
+                "observation": obs.to_public(),
+                "details": {
+                    "elements": [_element_to_dict(e) for e in elements],
+                    "truncated": truncated,
+                },
+                "warnings": [],
+            },
+            image=img_bytes,
+            mime=mime,
+        )
+
+    def find_text(
+        self,
+        query: str,
+        target: str = "screen",
+        match: MatchMode = "contains",
+    ) -> Result:
+        """Capture *target* and search for *query* via offline Windows OCR."""
+        if not query:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "find_text query must not be empty.")
+        parsed = parse_target(target)
+        frame, win = self.capturer.capture(parsed)
+        lines = self._ocr_fn(frame.image, None)
+        matches = match_text(lines, query, match=match)
+
+        preview = make_preview(frame.image, self.cfg.preview_max_edge)
+        mapping = ImageMapping(
+            frame_rect=frame.screen_rect,
+            crop=Rect(0, 0, frame.image.width, frame.image.height),
+            image_size=preview.size,
+        )
+        win_dict = _window_to_dict(win) if win is not None else None
+        if win_dict is not None and win is not None:
+            win_dict["last_popup"] = self.last_active_popup(win.hwnd)
+        obs = self.store.add(frame, preview, mapping, target=target, window=win_dict)
+        img_bytes, mime = encode_image(preview, self.cfg.max_image_bytes)
+
+        ox, oy = frame.screen_rect.left, frame.screen_rect.top
+        match_dicts = [
+            {
+                "text": m.text,
+                "rect_image": m.rect_image.as_list(),
+                "rect_screen": [
+                    ox + m.rect_image.left,
+                    oy + m.rect_image.top,
+                    ox + m.rect_image.right,
+                    oy + m.rect_image.bottom,
+                ],
+            }
+            for m in matches
+        ]
+        return Result(
+            payload={
+                "ok": True,
+                "action": "find_text",
+                "observation": obs.to_public(),
+                "details": {"matches": match_dicts, "query": query, "match": match},
+                "warnings": [],
+            },
+            image=img_bytes,
+            mime=mime,
+        )
+
+    def request_user_region(
+        self,
+        prompt: str | None = None,
+        timeout_s: float = 120.0,
+    ) -> Result:
+        """Freeze the virtual screen and let the user drag-select a region."""
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "timeout_s must be positive and finite.")
+        frame, _ = self.capturer.capture(CaptureTarget(kind="screen"))
+        vs = frame.screen_rect
+        selected = self._snip_fn(frame.image, vs, prompt, timeout_s)
+        if selected is None:
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "request_user_region",
+                    "details": {"cancelled": True},
+                    "warnings": [],
+                }
+            )
+        clipped = selected.intersection(vs)
+        if clipped is None or clipped.width <= 0 or clipped.height <= 0:
+            return Result(
+                payload={
+                    "ok": True,
+                    "action": "request_user_region",
+                    "details": {"cancelled": True},
+                    "warnings": [],
+                }
+            )
+        crop_box = (
+            clipped.left - vs.left,
+            clipped.top - vs.top,
+            clipped.right - vs.left,
+            clipped.bottom - vs.top,
+        )
+        cropped_img = frame.image.crop(crop_box)
+        sub_frame = Frame(
+            image=cropped_img,
+            screen_rect=clipped,
+            backend=frame.backend,
+            captured_at=self.clock(),
+            attempts=frame.attempts,
+        )
+        preview = make_preview(cropped_img, self.cfg.preview_max_edge)
+        mapping = ImageMapping(
+            frame_rect=clipped,
+            crop=Rect(0, 0, cropped_img.width, cropped_img.height),
+            image_size=preview.size,
+        )
+        target_str = f"region:{clipped.left},{clipped.top},{clipped.width},{clipped.height}"
+        obs = self.store.add(
+            sub_frame,
+            preview,
+            mapping,
+            target=target_str,
+            tags=("user_snip",),
+        )
+        img_bytes, mime = encode_image(preview, self.cfg.max_image_bytes)
+        return Result(
+            payload={
+                "ok": True,
+                "action": "request_user_region",
+                "observation": obs.to_public(),
+                "details": {"cancelled": False},
+                "warnings": [],
+            },
+            image=img_bytes,
+            mime=mime,
+        )
+
+    def get_user_snips(self, limit: int = 1) -> Result:
+        """Return recent user-snipped observations, newest first."""
+        if limit < 0:
+            raise EdmError(ErrorCode.INVALID_ARGUMENT, "limit must be non-negative.")
+        snips = self.store.list_by_tag("user_snip", limit=limit)
+        return Result(
+            payload={
+                "ok": True,
+                "action": "get_user_snips",
+                "snips": [s.to_public() for s in snips],
+                "details": {"count": len(snips)},
+                "warnings": [],
+            }
+        )

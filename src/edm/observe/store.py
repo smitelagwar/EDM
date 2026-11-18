@@ -272,6 +272,13 @@ class ObservationStore:
                 return obs
         return None
 
+    def list_by_tag(self, tag: str, limit: int = 1) -> list[Observation]:
+        """Return up to *limit* most recent observations carrying *tag*, newest first."""
+        if limit <= 0:
+            return []
+        matched = [obs for obs in reversed(self._read_all()) if tag in obs.tags]
+        return matched[:limit]
+
     def load_original(self, obs: Observation) -> Image.Image:
         """Load the full-resolution original PNG for *obs*."""
         if not obs.original_path.is_file():

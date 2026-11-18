@@ -103,11 +103,25 @@ def resolve_point(
         )
 
     if mode == "text":
-        raise EdmError(
-            ErrorCode.DEPENDENCY_MISSING,
-            "OCR text addressing is not yet available (pending T4.2).",
-            details={"text": a.text},
-        )
+        assert a.text is not None
+        res = edm.find_text(a.text, target=a.target, match="contains")
+        matches = res.payload["details"]["matches"]
+        if not matches:
+            raise EdmError(
+                ErrorCode.WINDOW_NOT_FOUND,
+                f"Text {a.text!r} not found in target {a.target!r}.",
+                details={"text": a.text, "target": a.target},
+            )
+        first = matches[0]
+        rs = first["rect_screen"]
+        pt = Point((rs[0] + rs[2]) // 2, (rs[1] + rs[3]) // 2)
+        warnings: list[str] = []
+        if len(matches) > 1:
+            warnings.append(
+                f"Multiple OCR matches ({len(matches)}) for {a.text!r}; selected first."
+            )
+        obs = edm.store.get(res.payload["observation"]["id"])
+        return pt, obs, warnings
 
     assert a.screen_x is not None and a.screen_y is not None
     return (

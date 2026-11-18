@@ -164,8 +164,10 @@ def validate_steps(edm: Edm, steps: list[Step]) -> None:
             if not math.isfinite(timeout_s) or timeout_s <= 0 or timeout_s > 60.0:
                 raise EdmError(ErrorCode.INVALID_ARGUMENT, "wait_for timeout_s must be in (0, 60].")
             if kind == "text":
-                raise EdmError(ErrorCode.DEPENDENCY_MISSING, "wait_for text requires T4.2 OCR.")
-            if kind in ("window", "window_gone"):
+                if not args.get("query"):
+                    raise EdmError(ErrorCode.INVALID_ARGUMENT, "wait_for text requires query.")
+                parse_target(str(args.get("target", "screen")))
+            elif kind in ("window", "window_gone"):
                 if not args.get("query"):
                     raise EdmError(ErrorCode.INVALID_ARGUMENT, f"wait_for {kind} requires query.")
             elif kind in ("change", "stable"):

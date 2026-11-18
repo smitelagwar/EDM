@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +23,8 @@ from edm.actions.mouse import (
 from edm.capture.base import Frame
 from edm.errors import EdmError, ErrorCode
 from edm.geometry import Point, Rect
+from edm.perception.ocr import OcrLine, OcrWord
+from edm.perception.uia import RawElement
 from edm.win32.monitors import MonitorInfo
 from edm.win32.process import Integrity
 from edm.win32.session import SessionInfo, SessionState
@@ -233,3 +235,82 @@ class FakeClipboard:
     def get_image(self) -> Image.Image | None:
         """Return fake clipboard image."""
         return self.image
+
+
+@dataclass
+class FakeUiaProvider:
+    """Deterministic UIA element provider for unit tests."""
+
+    items: list[RawElement] = field(
+        default_factory=lambda: [
+            RawElement(
+                name="EDM-OK",
+                control_type="Button",
+                rect=Rect(200, 200, 300, 260),
+                enabled=True,
+                visible=True,
+                automation_id="btnOk",
+            ),
+            RawElement(
+                name="Input",
+                control_type="Edit",
+                rect=Rect(320, 200, 520, 240),
+                enabled=True,
+                visible=True,
+                automation_id="editMain",
+                value="",
+            ),
+        ]
+    )
+
+    def iter_elements(self, hwnd: int) -> Iterator[RawElement]:
+        """Yield configured fake UIA elements."""
+        del hwnd
+        return iter(self.items)
+
+
+@dataclass
+class FakeOcrEngine:
+    """Deterministic fake OCR callable returning Turkish/English lines."""
+
+    lines: list[OcrLine] = field(
+        default_factory=lambda: [
+            OcrLine(
+                text="EDM Tamam",
+                words=[
+                    OcrWord("EDM", Rect(100, 300, 180, 340)),
+                    OcrWord("Tamam", Rect(400, 300, 500, 340)),
+                ],
+                rect=Rect(100, 300, 500, 340),
+            ),
+            OcrLine(
+                text="Şüphe Öğün",
+                words=[
+                    OcrWord("Şüphe", Rect(120, 360, 220, 400)),
+                    OcrWord("Öğün", Rect(230, 360, 310, 400)),
+                ],
+                rect=Rect(120, 360, 310, 400),
+            ),
+        ]
+    )
+
+    def __call__(self, img: Image.Image, lang: str | None = None) -> list[OcrLine]:
+        del img, lang
+        return list(self.lines)
+
+
+@dataclass
+class FakeSnipSelector:
+    """Deterministic fake snip overlay selector for unit tests."""
+
+    rect: Rect | None = field(default_factory=lambda: Rect(200, 200, 500, 400))
+
+    def __call__(
+        self,
+        frozen: Image.Image,
+        virtual: Rect,
+        prompt: str | None = None,
+        timeout_s: float = 120.0,
+    ) -> Rect | None:
+        del frozen, virtual, prompt, timeout_s
+        return self.rect

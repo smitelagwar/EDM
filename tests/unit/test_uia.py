@@ -7,7 +7,7 @@ import pytest
 
 from edm.errors import EdmError, ErrorCode
 from edm.geometry import Rect
-from edm.perception.uia import RawElement, collect_elements
+from edm.perception.uia import RawElement, _read_value, collect_elements
 
 
 class _FakeProvider:
@@ -75,3 +75,18 @@ def test_uia_unavailable_maps_error() -> None:
     with pytest.raises(EdmError) as exc_info:
         collect_elements(101, provider=_FailingProvider())
     assert exc_info.value.code == ErrorCode.UIA_UNAVAILABLE
+
+
+def test_uia_nan_timeout_and_get_pattern() -> None:
+    with pytest.raises(EdmError) as exc_info:
+        collect_elements(101, timeout_s=float("nan"), provider=_FakeProvider([]))
+    assert exc_info.value.code == ErrorCode.INVALID_ARGUMENT
+
+    class _PatternVal:
+        Value = "from-get-pattern"
+
+    class _Ctrl:
+        def GetPattern(self, pid: int) -> _PatternVal | None:
+            return _PatternVal() if pid == 10002 else None
+
+    assert _read_value(_Ctrl()) == "from-get-pattern"

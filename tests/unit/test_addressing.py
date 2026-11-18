@@ -33,7 +33,12 @@ def test_resolve_point_screen_warns(fake_edm: Edm) -> None:
     assert len(warnings) >= 1
 
 
-def test_resolve_point_text_dependency_missing(fake_edm: Edm) -> None:
+def test_resolve_point_text_resolves_and_not_found(fake_edm: Edm) -> None:
+    pt, obs, warnings = resolve_point(fake_edm, Address(text="Tamam"))
+    assert pt == Point(450, 320)
+    assert obs is not None
+    assert warnings == []
+
     with pytest.raises(EdmError) as exc_info:
-        resolve_point(fake_edm, Address(text="OK"))
-    assert exc_info.value.code == ErrorCode.DEPENDENCY_MISSING
+        resolve_point(fake_edm, Address(text="MissingText"))
+    assert exc_info.value.code == ErrorCode.WINDOW_NOT_FOUND

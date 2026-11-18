@@ -101,6 +101,8 @@ def main() -> int:
     )
 
     root.update_idletasks()
+    with contextlib.suppress(Exception):
+        ctypes.windll.user32.SetWindowTextW(ok_btn.winfo_id(), "EDM-OK")
     write_event("ready")
     root.mainloop()
     return 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 from collections import deque
 from collections.abc import Iterable, Iterator
@@ -76,11 +77,24 @@ def _normalize_control_type(name: str) -> str:
     return name
 
 
-def _read_value(ctrl: Any) -> str | None:
+_VALUE_PATTERN_ID = 10002
+
+
+def _read_value(ctrl: Any, pattern_id: int = _VALUE_PATTERN_ID) -> str | None:
     try:
-        vp = ctrl.GetValuePattern()
-        if vp is not None:
-            return str(vp.Value)
+        get_pat = getattr(ctrl, "GetPattern", None)
+        if callable(get_pat):
+            vp = get_pat(pattern_id)
+            if vp is not None:
+                return str(vp.Value)
+    except Exception:
+        pass
+    try:
+        get_vp = getattr(ctrl, "GetValuePattern", None)
+        if callable(get_vp):
+            vp = get_vp()
+            if vp is not None:
+                return str(vp.Value)
     except Exception:
         return None
     return None
@@ -149,10 +163,10 @@ def collect_elements(
     screen_bounds: Rect | None = None,
 ) -> tuple[list[Element], bool]:
     """Collect visible interactive elements for *hwnd* within *timeout_s*."""
-    if max_elements <= 0 or timeout_s <= 0:
+    if not math.isfinite(timeout_s) or max_elements <= 0 or timeout_s <= 0:
         raise EdmError(
             ErrorCode.INVALID_ARGUMENT,
-            "max_elements and timeout_s must be positive.",
+            "max_elements and finite timeout_s must be positive.",
         )
 
     active_provider: ElementProvider = provider if provider is not None else UiaElementProvider()

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from edm import __version__
 from edm.errors import NEXT_STEP, ErrorCode
+from edm.perception.ocr import available_ocr_languages
 from edm.win32.monitors import list_monitors, virtual_screen
 from edm.win32.process import Integrity, integrity_rank, self_integrity
 
@@ -23,15 +24,8 @@ def _has_module(name: str) -> bool:
 
 
 def _ocr_status() -> dict[str, Any]:
-    if not _has_module("winrt.windows.media.ocr"):
-        return {"available": False, "languages": []}
-    try:
-        from winrt.windows.media.ocr import OcrEngine  # type: ignore[import-not-found]
-
-        langs = [str(lang.language_tag) for lang in OcrEngine.available_recognizer_languages]
-        return {"available": True, "languages": langs}
-    except Exception:
-        return {"available": False, "languages": []}
+    langs = available_ocr_languages()
+    return {"available": bool(langs), "languages": langs}
 
 
 def run_doctor(edm: Edm) -> dict[str, Any]:

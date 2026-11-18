@@ -176,6 +176,19 @@ def build_parser() -> argparse.ArgumentParser:
     sq_p.add_argument("--steps", required=True, help="JSON list of {tool, args} steps.")
     sq_p.add_argument("--continue-on-error", action="store_true")
 
+    el_p = subparsers.add_parser("elements", help="Collect UIA elements with Set-of-Mark.")
+    el_p.add_argument("--window", default=None, help="Window query selector.")
+    el_p.add_argument("--max-elements", type=int, default=150)
+
+    ft_p = subparsers.add_parser("find-text", help="Find text via offline Windows OCR.")
+    ft_p.add_argument("query", help="Text query or regex.")
+    ft_p.add_argument("--target", default="screen")
+    ft_p.add_argument("--match", default="contains", choices=["contains", "exact", "regex"])
+
+    sn_p = subparsers.add_parser("snip", help="Let the user draw a screen region.")
+    sn_p.add_argument("--prompt", default=None)
+    sn_p.add_argument("--timeout-s", type=float, default=120.0)
+
     return parser
 
 
@@ -291,6 +304,12 @@ def _dispatch(args: argparse.Namespace) -> Result | None:
         if not isinstance(raw_steps, list):
             raise EdmError(ErrorCode.INVALID_ARGUMENT, "steps must be a JSON list.")
         return edm.run_sequence(raw_steps, stop_on_error=not args.continue_on_error)
+    if args.command == "elements":
+        return edm.ui_elements(window=args.window, max_elements=args.max_elements)
+    if args.command == "find-text":
+        return edm.find_text(args.query, target=args.target, match=args.match)
+    if args.command == "snip":
+        return edm.request_user_region(prompt=args.prompt, timeout_s=args.timeout_s)
     return None
 
 
