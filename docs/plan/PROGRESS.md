@@ -4,22 +4,22 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%0 (0 / 27 görev)`
-- **Aktif Faz:** `Faz 0 — Bekliyor`
-- **Faz Yüzdeleri:** Faz 0 `%0 (0/2)` · Faz 1 `%0 (0/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%7 (2 / 27 görev)`
+- **Aktif Faz:** `Faz 1 — Win32 temel katman ve doctor`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%0 (0/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
-- **OS / Build:** `TBD (plan aşamasında Windows 10 22H2 / 19045.0 gözlendi)`
-- **Ekran / GPU:** `TBD (2560x1440 primary, RTX 4060 + AMD Radeon)`
-- **Python / uv:** `TBD`
+- **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
+- **Ekran / GPU:** `2560x1440 primary, NVIDIA GeForce RTX 4060 + AMD Radeon(TM) Graphics`
+- **Python / uv:** `Python 3.12.14 / uv 0.12.5`
 - **`edm doctor` → `session.state`:** `TBD (Faz 1 / T1.5'te 1 kez ölçülüp yazılacak)`
 
 ---
 
 ## Faz 0 — İskelet ve araç zinciri
-- [ ] **T0.1** Proje iskeleti, CI ve `edm --version`
-- [ ] **T0.2** Hata modeli ve yapılandırma
-- [ ] **Faz 0 Kapısı:** `ruff` + `mypy` + `pytest` + CI yeşil → `git push origin main`
+- [x] **T0.1** Proje iskeleti, CI ve `edm --version` — ac3af95 — 2 test yeşil; paket iskeleti, Ruff/mypy/pytest ayarları ve CI akışı eklendi.
+- [x] **T0.2** Hata modeli ve yapılandırma — 295674b — 15 test yeşil; 20 ErrorCode, EdmError payload ve TOML Config yükleyici eklendi.
+- [x] **Faz 0 Kapısı:** `ruff` + `mypy` + `pytest` + CI yeşil → `git push origin main`
 
 ## Faz 1 — Win32 temel katman ve `doctor`
 - [ ] **T1.1** ctypes bağları ve Per-Monitor-V2 DPI farkındalığı
