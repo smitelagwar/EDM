@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edm-desktop"
+version = "0.1.0.dev0"
+description = "Windows desktop vision and input control for AI agents (MCP + CLI)"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { file = "LICENSE" }
+dependencies = [
+    "comtypes>=1.5.0",
+    "mcp>=2.3.0",
+    "mss>=10.2.0",
+    "pillow>=13.0.0",
+    "uiautomation>=2.0.29",
+]
+
+[project.scripts]
+edm = "edm.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -m 'not live' --timeout=60"
+markers = [
+    "live: gerçek etkileşimli masaüstü gerektirir",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/edm"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.170.15",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.17.5",
+]
