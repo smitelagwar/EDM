@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from PIL import Image
 
+from edm.actions.keys import KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, KeyEvent, key_state_events
+from edm.actions.mouse import (
+    MOUSEEVENTF_LEFTDOWN,
+    MOUSEEVENTF_LEFTUP,
+    MOUSEEVENTF_MIDDLEDOWN,
+    MOUSEEVENTF_MIDDLEUP,
+    MOUSEEVENTF_RIGHTDOWN,
+    MOUSEEVENTF_RIGHTUP,
+    MouseEvent,
+    mouse_button_events,
+)
 from edm.capture.base import Frame
 from edm.errors import EdmError, ErrorCode
 from edm.geometry import Point, Rect
@@ -146,7 +158,58 @@ class FakeCaptureBackend:
 
 @dataclass
 class FakeInputSink:
-    """In-memory input event sink for unit tests."""
+    """In-memory input event sink implementing ``InputSink`` for unit tests."""
 
     events: list[dict[str, Any]] = field(default_factory=list)
-    cursor_pos: Point = field(default_factory=lambda: Point(500, 500))
+    _cursor_pos: Point = field(default_factory=lambda: Point(500, 500))
+    held_vks: set[int] = field(default_factory=set)
+    held_buttons: set[str] = field(default_factory=set)
+
+    def send(self, events: Sequence[KeyEvent | MouseEvent]) -> int:
+        """Record events and update held key/button state."""
+        for ev in events:
+            if isinstance(ev, KeyEvent):
+                self.events.append({"type": "key", "vk": ev.vk, "scan": ev.scan, "flags": ev.flags})
+                if (ev.flags & KEYEVENTF_UNICODE) == 0 and ev.vk != 0:
+                    if ev.flags & KEYEVENTF_KEYUP:
+                        self.held_vks.discard(ev.vk)
+                    else:
+                        self.held_vks.add(ev.vk)
+            else:
+                self.events.append(
+                    {"type": "mouse", "flags": ev.flags, "dx": ev.dx, "dy": ev.dy, "data": ev.data}
+                )
+                if ev.flags & MOUSEEVENTF_LEFTDOWN:
+                    self.held_buttons.add("left")
+                if ev.flags & MOUSEEVENTF_LEFTUP:
+                    self.held_buttons.discard("left")
+                if ev.flags & MOUSEEVENTF_RIGHTDOWN:
+                    self.held_buttons.add("right")
+                if ev.flags & MOUSEEVENTF_RIGHTUP:
+                    self.held_buttons.discard("right")
+                if ev.flags & MOUSEEVENTF_MIDDLEDOWN:
+                    self.held_buttons.add("middle")
+                if ev.flags & MOUSEEVENTF_MIDDLEUP:
+                    self.held_buttons.discard("middle")
+        return len(events)
+
+    def move_to(self, p: Point) -> None:
+        """Move fake cursor to *p*."""
+        self._cursor_pos = p
+        self.events.append({"type": "move_to", "x": p.x, "y": p.y})
+
+    def cursor_pos(self) -> Point:
+        """Return current fake cursor position."""
+        return self._cursor_pos
+
+    def release_held(self) -> None:
+        """Release all held keys and mouse buttons."""
+        cleanup: list[KeyEvent | MouseEvent] = []
+        for btn in list(self.held_buttons):
+            cleanup.extend(mouse_button_events(btn, "up"))
+        for vk in list(self.held_vks):
+            cleanup.extend(key_state_events(vk, "up"))
+        if cleanup:
+            self.send(cleanup)
+        self.held_buttons.clear()
+        self.held_vks.clear()
