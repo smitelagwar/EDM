@@ -17,7 +17,8 @@ Yapay zekâ AutoCAD, WinRAR, Chrome veya AOC G-Menu gibi masaüstü programları
 
 **EDM buna gözlem-tabanlı, PrtSc öncelikli, kapalı döngü bir mimariyle çözüm getirir:**
 - **Ekranda ne varsa gör:** Tam ekran, monitör, görünür pencere (GDI DWM bileşiği) veya dikdörtgen bölge yakalama; örtülü pencerelerde WGC / `PrintWindow` yedekleri ve otomatik boş kare tespiti.
-- **Genelden özele `zoom`:** Tam ekranı gördükten sonra yoğun araç çubuğu veya küçük düğmeyi orijinal çözünürlükte (4×'e kadar) yakınlaştır; EDM koordinatları fiziksel sanal ekrana (`pixel` veya `norm1000`) otomatik çevirir.
+- **Genelden özele `zoom`:** Tam ekranı gördükten sonra yoğun araç çubuğu veya küçük düğmeyi orijinal çözünürlükte (4×'e kadar, küçük CAD kırpmalarında kayıpsız PNG) yakınlaştır; EDM koordinatları fiziksel sanal ekrana (`pixel` veya `norm1000`) otomatik çevirir.
+- **İnsan gibi tam fare/klavye ve çizim kontrolü:** Tıklama, sürükleme, kesintisiz çok noktalı/eğri çizim (`draw_path`), tuş/fare basılı tutma (`mouse_button`, `key_state` + hata anında otomatik bırakma), Unicode yazma ve çok adımlı sıralı eylemler.
 - **Kullanıcı alıntısı (`edm snip`):** Dilediğinde ekranı dondurup dikdörtgeni kendin çiz, ajan doğrudan o bölge üzerinden çalışsın.
 - **Kapalı döngü güvenlik:** Per-Monitor-V2 DPI kilidi, UIPI tespiti (`ELEVATION_REQUIRED`), eylem öncesi 24×24 piksel yama ve pencere geometrisiyle eski-gözlem (stale) koruması, ajanlar arası girdi kilidi ve anlık acil durdurma (`Ctrl+Alt+Shift+F12` + `(0,0)` köşe).
 

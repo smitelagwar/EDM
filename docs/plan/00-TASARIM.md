@@ -30,7 +30,7 @@ EDM, ajana **tek, güvenilir ve yüksek çözünürlüklü bir "göz ve el" katm
 - **G2** Yakalama: `screen`, `monitor:N`, `window:<sorgu>`, `region:x,y,w,h` ile fiziksel çözünürlükte, orijinal PNG diske, önizleme ajana.
 - **G3** `zoom`: Var olan bir gözlemin herhangi bir dikdörtgenini orijinal çözünürlükten (gerekirse 4×'e kadar büyüterek) verir. İsteğe bağlı olarak o bölgeyi taze yakalar.
 - **G4** Koordinat sözleşmesi: Ajan, gördüğü görüntünün pikseliyle (veya `norm1000`) konuşur. Ekrana çeviriyi EDM yapar.
-- **G5** Girdi: tıklama, sürükleme, tekerlek, kısayol, Unicode metin, pencere işlemleri, başlatma, pano.
+- **G5** Girdi: tıklama, sürükleme, sürekli çok-noktalı/eğri çizim (`draw_path`), basılı tutma/bırakma (`mouse_button`, `key_state` + hata anında otomatik bırakma), tekerlek, kısayol, Unicode metin, pencere işlemleri, başlatma, pano.
 - **G6** Güvenli eylem: oturum ve güvenli masaüstü kontrolü, UIPI tespiti, eski gözlem (stale) koruması, ajanlar arası girdi kilidi, acil durdurma.
 - **G7** Algı: UIA öğeleri + numaralı işaretler, Windows OCR ile metin bulma (Türkçe dahil), görüntü farkı, bekleme koşulları.
 - **G8** Kullanıcı alıntısı: Kullanıcı dikdörtgeni kendi çizer (`edm snip`) ve ajan bunu okur.
@@ -108,7 +108,8 @@ flowchart LR
 
 - **Boş kare tespiti:** Pillow `ImageStat` ile tüm kanallarda std < 2,0 ve uç değer aralığı < 8 ise kare "boş" sayılır. Pencere hedefinde sıradaki yedeğe geçilir. Hepsi boşsa `CAPTURE_BLANK` döner ve `attempts` listesi eklenir.
 - **İmleç:** GDI imleci yakalamaz. `cursor=true` iken imleç konumu önizlemeye kırmızı artı olarak çizilir. Orijinal PNG temiz kalır.
-- **Önizleme:** Uzun kenar varsayılan 1600 px'tir. Küçültme Lanczos ile yapılır, büyütme yapılmaz. Yük sınırı 1,5 MB'tır: önce PNG denenir, aşarsa JPEG kalitesi 85→60 basamaklarla düşürülür.
+- **Önizleme:** Uzun kenar varsayılan 1600 px'tir. Küçültme Lanczos ile yapılır, büyütme yapılmaz. Yük sınırı 1,5 MB'tır: önce kayıpsız PNG denenir (küçük `zoom` CAD çizgileri bozulmaz), aşarsa JPEG kalitesi 85→60 basamaklarla düşürülür.
+- **Aktif pencere bilgisi:** `screenshot` dönüşünün `details.foreground_window` alanı o an odaktaki pencerenin özetini ek araç çağırmadan taşır.
 - **Izgara (`grid=true`):** Önizlemenin kenarlarına her 100 önizleme pikselinde bir etiketli çentik çizilir. Boyut değişmez.
 - **Görünmeyenler (bilinen sınırlar):** UAC/kilit ekranı (güvenli masaüstü), DRM korumalı video, `WDA_EXCLUDEFROMCAPTURE` kullanan pencereler. EDM bunları "göremediğini" açıkça söyler.
 
@@ -159,6 +160,9 @@ Adresleme modlarından **tam olarak biri** verilir: (`observation_id`+`x`+`y`[+`
 | `click` | adresleme + `button="left"`, `count=1`, `modifiers=[]`, `verify=true`, `observe=true` | sonuç + yeni gözlem |
 | `move_mouse` | adresleme | sonuç + yeni gözlem |
 | `drag` | `from_*` ve `to_*` adresleme, `button="left"`, `duration_ms=300` | sonuç + yeni gözlem |
+| `draw_path` | `observation_id`, `points` (≤200 `[x,y]`), `coord_space="pixel"`, `button="left"`, `press_button=true`, `smooth=false`, `duration_ms=600` | sonuç + yeni gözlem |
+| `mouse_button` | `action` ∈ {down, up}, `button="left"`, opsiyonel adresleme | sonuç + yeni gözlem |
+| `key_state` | `key`, `action` ∈ {down, up} | sonuç + yeni gözlem |
 | `scroll` | adresleme + `dy=0` (çentik, + yukarı), `dx=0` | sonuç + yeni gözlem |
 | `type_text` | `text`, `interval_ms=0`, `observe=true` | sonuç + yeni gözlem |
 | `press_keys` | `keys` (ör. `"ctrl+s"` veya `["alt","f","o"]`), `repeat=1` | sonuç + yeni gözlem |
@@ -194,7 +198,7 @@ Adresleme modlarından **tam olarak biri** verilir: (`observation_id`+`x`+`y`[+`
 | `INTERNAL` | hayır | Günlük yolunu kullanıcıya ilet |
 
 ### 10.4 CLI
-`edm doctor | monitors | windows | shot | zoom | elements | find-text | click | move | drag | scroll | type | keys | window | launch | wait | clip | seq | snip | prune | mcp | serve-http | --version`. Çıktı stdout'a JSON olarak yazılır. Çıkış kodları: 0 başarı, 2 `EdmError`, 1 beklenmeyen hata. Bekçi zamanlayıcısı 90 s'dir.
+`edm doctor | monitors | windows | shot | zoom | elements | find-text | click | move | drag | draw-path | mouse-btn | key-state | scroll | type | keys | window | launch | wait | clip | seq | snip | prune | mcp | serve-http | --version`. Çıktı stdout'a JSON olarak yazılır. Çıkış kodları: 0 başarı, 2 `EdmError`, 1 beklenmeyen hata. Bekçi zamanlayıcısı 90 s'dir.
 
 ## 11. Ajan kullanım stratejisi (beceri dosyasına girer)
 1. Oturum başında bir kez `doctor` çağrılır. `ISOLATED_DESKTOP` gelirse durulur ve bildirilir.
@@ -217,5 +221,28 @@ Adresleme modlarından **tam olarak biri** verilir: (`observation_id`+`x`+`y`[+`
 
 ## 13. Sürümleme
 - `v0.1.0-rc1`: Tüm fazlar tamam, birim/entegrasyon kapıları yeşil, canlı kabul kullanıcıda bekliyor.
-- `v0.1.0`: Canlı kabul (L1–L11) kullanıcının masaüstünde geçti.
+- `v0.1.0`: Canlı kabul (L1–L12) kullanıcının masaüstünde geçti.
 - Sonrası: [IDEAS.md](IDEAS.md).
+
+## 14. Çoklu ajan uygulama mimarisi (Swarm & kota disiplini)
+
+Uygulama süreci tek dev bir sohbette context şişirmeden 4 katmanlı **Swarm** hiyerarşisiyle yürütülür:
+
+```mermaid
+flowchart TB
+  U["Kullanıcı ↔ Ana Sohbet (İnce Koordinatör)"] -- "Yalnız % rapor & kısa karar" --- SUP["supervisor (gemini-4-hydrogen-high)"]
+  SUP -- "Görev dağıtımı (TDD)" --> C1["coder-1 (gemini-4-hydrogen-medium)"]
+  SUP -- "Paralel / bağımsız görev" --> C2["coder-2 (gemini-4-hydrogen-medium)"]
+  C1 & C2 -- "Diff + test sonucu" --> CRIT["critic (gemini-4-hydrogen-xhigh)"]
+  CRIT -- "Eleştiri + çözüm yolu" --> SUP
+  SUP -. "Yalnız anlaşmazlık / kritik kapıda çağrılır" .-> HAK["hakem (gemini-4-argon-high)"]
+  HAK -. "Kesin hüküm: ONAY / DÜZELT / GEREKSİZ" .-> SUP
+```
+
+- **Ana Sohbet (`coordinator`):** Kod yazmaz, uzun dosya/diff/log okumaz. Yalnız `supervisor`'dan gelen faz & ilerleme yüzdesi raporlarını kullanıcıya iletir ve kullanıcının yeni emirlerini `@supervisor`'a aktarır.
+- **`supervisor` (`gemini-4-hydrogen-high`):** Plan yöneticisi. Bağımsız modülleri `coder-*` işçilerine dağıtır (`workspace:"share"` ile paralel, sonra `main`'e birleştirir), ilerleme yüzdesini hesaplar, faz kapılarını koşar.
+- **`coder-*` (`gemini-4-hydrogen-medium`):** Asıl kodlama ve TDD test yazımını yapan işçiler.
+- **`critic` (`gemini-4-hydrogen-xhigh`):** Yalnız inceleme ve doğrulama yapar (kod yazmaz). Hata/eksik/sahte test görürse eleştirir ve somut çözüm önerir.
+- **`hakem` (`gemini-4-argon-high`):** Sürekli açık tutulmaz (haftalık kota korunur). Yalnız `critic` ile `coder` arasında anlaşmazlık olduğunda, `critic` ağır/riskli değişiklik istediğinde veya faz geçişi/final kabulde açılıp *"eleştiri haklı mı, gerçekten gerekli mi?"* diye karar verir.
+- **Kota tasarrufu:** `@all` kullanılmaz; bekleyen ajanlar 0 token harcar; paralel çalışma bitince geçici işçiler temizlenir.
+

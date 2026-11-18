@@ -1,7 +1,12 @@
 # EDM v0.1 İlerleme Takibi (PROGRESS)
 
-> Güncelleme kuralı: Her görev bittiğinde kutuyu işaretle, kısa commit hash'ini ve tek cümlelik notu ekle.
+> Güncelleme kuralı: Her görev bittiğinde kutuyu işaretle, kısa commit hash'ini ve tek cümlelik notu ekle. Yüzde hesabı işaretli `[x]` görev sayısına göre (`round(tamamlanan * 100 / 27)`) yapılır.
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
+
+## İlerleme Özeti
+- **Genel İlerleme:** `%0 (0 / 27 görev)`
+- **Aktif Faz:** `Faz 0 — Bekliyor`
+- **Faz Yüzdeleri:** Faz 0 `%0 (0/2)` · Faz 1 `%0 (0/5)` · Faz 2 `%0 (0/4)` · Faz 3 `%0 (0/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `TBD (plan aşamasında Windows 10 22H2 / 19045.0 gözlendi)`
@@ -47,7 +52,8 @@
 - [ ] **L7** `test_drag_and_scroll`
 - [ ] **L9** `test_stale_after_move`
 - [ ] **L10** `test_killswitch_mid_sequence`
-- [ ] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9–L10 PASS veya `LIVE-PENDING` → `git push origin main`
+- [ ] **L12** `test_draw_path_continuous`
+- [ ] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9, L10, L12 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı
 - [ ] **T4.1** UIA öğe toplama (5 s zaman aşımı) ve Set-of-Mark (`marks`) numaralandırma
@@ -78,6 +84,7 @@
 - [ ] **M5** UAC / Kilit ekranı tespiti
 - [ ] **M6** %125 / %150 DPI ölçekleme doğruluğu
 - [ ] **M7** Türkçe klavye + pano geri yükleme
+- [ ] **M8** İnsan gibi sürekli çizim / basılı tutma (Paint / AutoCAD)
 
 ## Günlük / Deneme Notları
 *(3 deneme kuralı kapsamındaki hipotezler ve faz özetleri buraya işlenir.)*

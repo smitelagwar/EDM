@@ -17,7 +17,8 @@ AI agents trying to drive real Windows desktop apps (AutoCAD, WinRAR, Chrome dia
 
 **EDM solves this with an observation-bound, PrintScreen-first, closed-loop architecture:**
 - **See everything actually on screen:** Virtual screen, specific monitor, visible window crop (GDI composite), or rectangular region — with WGC and `PrintWindow` fallbacks for occluded windows and blank-frame detection.
-- **Coarse-to-fine `zoom`:** Inspect full-screen layout, then crop/zoom any dense ribbon or tiny button at native pixel resolution while EDM automatically maps coordinates back to the physical virtual screen (`pixel` or `norm1000`).
+- **Coarse-to-fine `zoom`:** Inspect full-screen layout, then crop/zoom any dense ribbon or tiny button at native pixel resolution (preserving lossless PNG on small CAD crops) while EDM automatically maps coordinates back to the physical virtual screen (`pixel` or `norm1000`).
+- **Human-like full input & drawing control:** Single/double/right/middle clicks, straight drags, smooth multi-point continuous strokes (`draw_path` for Paint/CAD curves), held buttons/keys (`mouse_button`, `key_state` with automatic release-on-error), Unicode typing, shortcuts, and validated multi-step sequences.
 - **Closed-loop safety:** Per-Monitor-V2 DPI lock, UIPI elevation detection (`ELEVATION_REQUIRED`), stale-observation guard (window geometry + 24×24 pixel patch verification), inter-agent input lock, and instant global kill switch (`Ctrl+Alt+Shift+F12` + `(0,0)` corner).
 - **Multi-client ready:** One core engine (`src/edm`) exposed as both an **MCP server** (`stdio` + user-started loopback HTTP) and a JSON **CLI** (`edm`), designed for Antigravity, Codex Desktop, Claude Code, Gemini CLI (`agy`), and local scripts.
 

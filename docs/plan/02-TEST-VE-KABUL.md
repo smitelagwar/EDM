@@ -28,7 +28,7 @@ Kurallar:
 
 > **İzole masaüstü kuralı:** Komut ortamı `WinSta0\exebox-...` içindeyse `require_interactive` fiksürü canlı testleri `LIVE-PENDING: isolated_desktop` olarak atlar. Bu bir hata değildir; ajan masaüstü değiştirmeye çalışmaz, [PROGRESS.md](PROGRESS.md) dosyasına `LIVE-PENDING` işler.
 
-## 3. Canlı kabul testleri (L1–L11)
+## 3. Canlı kabul testleri (L1–L12)
 
 Tüm canlı testler izole Tk hedef uygulaması (`tests/live/target_app.py`) veya alt süreç (`edm snip`) üzerinde koşar; kullanıcının açık iş pencerelerine dokunmaz.
 
@@ -46,8 +46,9 @@ Tüm canlı testler izole Tk hedef uygulaması (`tests/live/target_app.py`) veya
 | **L9** | `test_stale_after_move` | Gözlem al → `window_action("move")` → eski gözlemle `click` | `STALE_OBSERVATION` döner ve hedef log'unda sıfır tıklama olur |
 | **L10** | `test_killswitch_mid_sequence` | `run_sequence` ortasında `Local\EDM_ABORT` olayı ayarlanır | Dizi anında kesilir, `ABORTED_BY_USER` döner, kalan adımlar çalışmaz |
 | **L11** | `test_snip_driven_by_edm` | `edm snip` overlay'i başlar, EDM `drag(500,300 → 900,600)` çizer | Üretilen kullanıcı alıntısı gözleminin `frame_rect` değeri `±2 px` içinde tutar |
+| **L12** | `test_draw_path_continuous` | Tuvalde tek `draw_path` çağrısıyla 5 noktalı çokgen/eğri çizimi | Hedef log'unda tek `down`, kesintisiz `Motion` olayları ve tek `up` kaydı oluşur; basılı tuş/düğme kalmaz |
 
-## 4. Gerçek uygulama doğrulama matrisi (M1–M7)
+## 4. Gerçek uygulama doğrulama matrisi (M1–M8)
 
 Kullanıcının masaüstünde (Faz 6 / `scripts/run-live-acceptance.ps1` + manuel ajan denemesi) doğrulanacak gerçek senaryolar:
 
@@ -60,3 +61,4 @@ Kullanıcının masaüstünde (Faz 6 / `scripts/run-live-acceptance.ps1` + manue
 | **M5** | **UAC / Kilit Ekranı** | `Win+L` veya UAC istemi sırasında çağrı | Asılı kalmadan `SESSION_LOCKED` veya `SECURE_DESKTOP` döner |
 | **M6** | **Ölçekli Ekran (%125 / %150 DPI)** | Windows ölçeği > %100 iken `screenshot`, `zoom`, `click` | `SetProcessDpiAwarenessContext(-4)` sayesinde ±1 px doğruluk korunur |
 | **M7** | **Türkçe Klavye + Pano Koruma** | TR-Q klavyede `press_keys` + `clipboard` testi | `VkKeyScanW` Türkçe karakterleri çözer; test sonrası önceki pano geri yüklenir |
+| **M8** | **İnsan Gibi Sürekli Çizim (Paint / CAD)** | `draw_path(smooth=true)` + `mouse_button` / `key_state` (`Shift` basılı tutarak çoklu seçim / orta tuş pan) | Fırça/çizgi tek kesintisiz hamlede çizilir, işlem sonunda veya hatada basılı tuş bırakılır |

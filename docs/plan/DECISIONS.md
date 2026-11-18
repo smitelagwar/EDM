@@ -37,3 +37,12 @@
 ### [AKTİF] [2026-11-18] [ADR-008] Görsel düzen ve üçüncü taraf esinlenmeler
 - **Karar:** Yalnızca MIT/BSD/Apache uyumlu bağımlılıklar eklenir (GPL/AGPL yasak). Açık kaynak GUI ajanı repolarından alınan mimari fikirler [../../THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) içinde belgelenir; kaynak kod doğrudan kopyalanmaz (temiz oda yazımı).
 - **Gerekçe:** Temiz lisans yönetimi ve sürdürülebilirlik.
+
+### [AKTİF] [2026-11-18] [ADR-009] 4 Katmanlı Swarm Orkestrasyonu ve Kota Disiplini
+- **Karar:** Uygulama Antigravity **Native Swarm** üzerinden 4 katmanda yürütülür: ince `coordinator` (ana sohbet, yalnız `%` özet ve kullanıcı emri aktarımı) → `supervisor` (`gemini-4-hydrogen-high`) → paralel/sıralı `coder-*` işçileri (`gemini-4-hydrogen-medium`, paralelde `workspace:"share"`) → salt-okunur `critic` (`gemini-4-hydrogen-xhigh`) → yalnız uyuşmazlık/ağır itiraz/faz kapısında açılan `hakem` (`gemini-4-argon-high`). `@all` yasaktır; `swarm` yoksa `agy` CLI / `invoke_subagent` yedek yolu kullanılır.
+- **Gerekçe:** Ana sohbetin context penceresi dolmaz; ucuz/hızlı `Hydrogen Medium` işçileri kodlar; `Hydrogen XHigh` hataları yakalar; haftalık kotalı `Argon High` yalnız gerçekten gerektiğinde çağrılır.
+
+### [AKTİF] [2026-11-18] [ADR-010] İnsan Gibi Sürekli Çizim (`draw_path`) ve Basılı Girdi Güvenliği
+- **Karar:** `drag`'a ek olarak v0.1'e `draw_path` (≤200 noktalı çokgen/Catmull-Rom yumuşatmalı kesintisiz imleç yolu), `mouse_button` (`down`/`up`) ve `key_state` (`down`/`up`) eklenir; her hata, `KillSwitch` veya dizi bitiminde `release_held()` basılı bırakılmış tuş/düğmeleri otomatik bırakır. Küçük CAD `zoom` kırpmaları `max_image_bytes` altında kayıpsız PNG korunur.
+- **Gerekçe:** AutoCAD OSNAP/3D orbit (`Shift+Orta Tık`) ve Paint/çizim programlarında serbest/eğri çizim tek hamlede yapılabilmeli ve sistem tuşu asla basılı kalmamalıdır.
+
