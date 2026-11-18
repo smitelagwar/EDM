@@ -4,9 +4,9 @@
 > Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
 
 ## İlerleme Özeti
-- **Genel İlerleme:** `%63 (17 / 27 görev)`
-- **Aktif Faz:** `Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı`
-- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%0 (0/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
+- **Genel İlerleme:** `%74 (20 / 27 görev)`
+- **Aktif Faz:** `Faz 5 — Arayüzler: CLI, MCP, entegrasyonlar`
+- **Faz Yüzdeleri:** Faz 0 `%100 (2/2)` · Faz 1 `%100 (5/5)` · Faz 2 `%100 (4/4)` · Faz 3 `%100 (6/6)` · Faz 4 `%100 (3/3)` · Faz 5 `%0 (0/4)` · Faz 6 `%0 (0/3)`
 
 ## Ortam (İlk oturumda 1 kez doldurulur)
 - **OS / Build:** `Windows 10 Pro 22H2 (Build 19045)`
@@ -56,13 +56,13 @@
 - [x] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9, L10, L12 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı
-- [ ] **T4.1** UIA öğe toplama (5 s zaman aşımı) ve Set-of-Mark (`marks`) numaralandırma
-- [ ] **T4.2** Çevrimdışı Windows OCR (`winrt-*`) ve Türkçe katlamalı metin arama (`find_text`)
-- [ ] **T4.3** Kullanıcı dikdörtgen alıntısı (`edm snip` + Tk donmuş ekran overlay)
-- [ ] **L2b** `test_uia_button_click`
-- [ ] **L8** `test_find_text_turkish`
-- [ ] **L11** `test_snip_driven_by_edm`
-- [ ] **Faz 4 Kapısı:** Kapı komutları yeşil; L2b, L8, L11 PASS veya `LIVE-PENDING` → `git push origin main`
+- [x] **T4.1** UIA öğe toplama (5 s zaman aşımı) ve Set-of-Mark (`marks`) numaralandırma — f253dd7 / a9af267 — 5 test yeşil; thread zaman aşımı, GetPattern ve `ui_elements` entegre edildi.
+- [x] **T4.2** Çevrimdışı Windows OCR (`winrt-*`) ve Türkçe katlamalı metin arama (`find_text`) — d737244 / a9af267 / 6acd85a — 8 test yeşil; `tr` OCR, 2× büyütme, `find_text` ve `Address(text=...)` eklendi.
+- [x] **T4.3** Kullanıcı dikdörtgen alıntısı (`edm snip` + Tk donmuş ekran overlay) — f461fdb / a9af267 — 17 test yeşil; `run_snip` overlay, `request_user_region` ve `get_user_snips` eklendi.
+- [~] **L2b** `test_uia_button_click` — `LIVE-PENDING: isolated_desktop`
+- [~] **L8** `test_find_text_turkish` — `LIVE-PENDING: isolated_desktop`
+- [~] **L11** `test_snip_driven_by_edm` — `LIVE-PENDING: isolated_desktop`
+- [x] **Faz 4 Kapısı:** Kapı komutları yeşil; L2b, L8, L11 PASS veya `LIVE-PENDING` → `git push origin main`
 
 ## Faz 5 — Arayüzler: CLI, MCP, entegrasyonlar
 - [ ] **T5.1** Tam CLI (`edm <subcommand>`, JSON stdout, çıkış kodları 0/1/2, 90 s bekçi)
