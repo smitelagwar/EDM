@@ -1,6 +1,6 @@
 # GEMINI.md
 
-**Zorunlu:** Önce [AGENTS.md](AGENTS.md) okunur. Başlangıç, Swarm rol ayrımı, bitiş ve sonsuz döngü önleme kuralları bağlayıcıdır.
+**Zorunlu:** Önce [AGENTS.md](AGENTS.md) ve [.agents/skills/hydrogen-swarm-orchestrator/SKILL.md](.agents/skills/hydrogen-swarm-orchestrator/SKILL.md) okunur. Başlangıç, Swarm rol ayrımı, bitiş ve sonsuz döngü önleme kuralları bağlayıcıdır.
 
 ## 1. Ana Sohbet (`coordinator`) İçin Altın Kural
 - Sen bu projenin **ince koordinatörüsün**: **asla kaynak kodu okuma, ham test çıktısı okuma, kendin kod yazma.** Context penceren temiz kalmak zorundadır.

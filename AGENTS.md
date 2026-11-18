@@ -24,7 +24,7 @@ Uygulama süreci tek sohbette context şişirmeden **4 katmanlı Swarm** düzeni
 6. **Swarm yoksa yedek:** Ortamda `swarm` aracı yoksa `agy` CLI (`$env:LOCALAPPDATA\agy\bin\agy.exe --model gemini-4-hydrogen-medium` / `gemini-4-hydrogen-xhigh` / `gemini-4-argon-high`) veya `invoke_subagent` ile aynı katmanlı akış uygulanır.
 
 ## 2. Okuma sırası (her oturumda)
-1. Bu dosya (`AGENTS.md`) ve rolüne göre [GEMINI.md](GEMINI.md).
+1. Bu dosya (`AGENTS.md`), [.agents/skills/hydrogen-swarm-orchestrator/SKILL.md](.agents/skills/hydrogen-swarm-orchestrator/SKILL.md) ve rolüne göre [GEMINI.md](GEMINI.md).
 2. [docs/plan/PROGRESS.md](docs/plan/PROGRESS.md): nerede ve hangi yüzdede olunduğunu gösterir.
 3. `supervisor`, `critic`, `hakem` ve ilgili `coder`: [docs/plan/00-TASARIM.md](docs/plan/00-TASARIM.md) + [docs/plan/01-UYGULAMA-PLANI.md](docs/plan/01-UYGULAMA-PLANI.md)'deki kendi görev bölümü. *(Ana sohbet `coordinator` yalnızca `AGENTS.md`, `GEMINI.md` ve `PROGRESS.md`'yi okur!)*
 4. Gerekirse [02-TEST-VE-KABUL.md](docs/plan/02-TEST-VE-KABUL.md), [DECISIONS.md](docs/plan/DECISIONS.md), [BLOCKERS.md](docs/plan/BLOCKERS.md).
