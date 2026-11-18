@@ -77,7 +77,7 @@ def test_doctor_call(tmp_path: Path) -> None:
         first = res.content[0]
         assert isinstance(first, TextContent)
         data = json.loads(first.text)
-        assert data["version"] == "0.1.0.dev0"
+        assert data["version"] == "0.1.0rc1"
         assert data["session"]["state"] == "ok"
 
     asyncio.run(asyncio.wait_for(_with_mcp_session(tmp_path, _check), timeout=30.0))

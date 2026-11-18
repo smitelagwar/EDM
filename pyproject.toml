@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "edm-desktop"
-version = "0.1.0.dev0"
+version = "0.1.0rc1"
 description = "Windows desktop vision and input control for AI agents (MCP + CLI)"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

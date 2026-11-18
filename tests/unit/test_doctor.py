@@ -60,5 +60,5 @@ def test_cli_doctor_json(
     captured = capsys.readouterr()
     assert rc == 0
     data = json.loads(captured.out)
-    assert data["version"] == "0.1.0.dev0"
+    assert data["version"] == "0.1.0rc1"
     assert data["session"]["state"] == "ok"

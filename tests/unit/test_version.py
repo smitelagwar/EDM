@@ -5,11 +5,11 @@ from edm.cli import main
 
 
 def test_version_string() -> None:
-    assert __version__ == "0.1.0.dev0"
+    assert __version__ == "0.1.0rc1"
 
 
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["--version"])
     captured = capsys.readouterr()
     assert rc == 0
-    assert "0.1.0.dev0" in captured.out
+    assert "0.1.0rc1" in captured.out
