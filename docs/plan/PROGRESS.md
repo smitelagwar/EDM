@@ -1,0 +1,83 @@
+# EDM v0.1 İlerleme Takibi (PROGRESS)
+
+> Güncelleme kuralı: Her görev bittiğinde kutuyu işaretle, kısa commit hash'ini ve tek cümlelik notu ekle.
+> Durum işaretleri: `[ ]` bekliyor · `[x]` tamamlandı · `[!]` `BLOCKED` ([BLOCKERS.md](BLOCKERS.md)) · `[~]` `LIVE-PENDING` (izole masaüstü)
+
+## Ortam (İlk oturumda 1 kez doldurulur)
+- **OS / Build:** `TBD (plan aşamasında Windows 10 22H2 / 19045.0 gözlendi)`
+- **Ekran / GPU:** `TBD (2560x1440 primary, RTX 4060 + AMD Radeon)`
+- **Python / uv:** `TBD`
+- **`edm doctor` → `session.state`:** `TBD (Faz 1 / T1.5'te 1 kez ölçülüp yazılacak)`
+
+---
+
+## Faz 0 — İskelet ve araç zinciri
+- [ ] **T0.1** Proje iskeleti, CI ve `edm --version`
+- [ ] **T0.2** Hata modeli ve yapılandırma
+- [ ] **Faz 0 Kapısı:** `ruff` + `mypy` + `pytest` + CI yeşil → `git push origin main`
+
+## Faz 1 — Win32 temel katman ve `doctor`
+- [ ] **T1.1** ctypes bağları ve Per-Monitor-V2 DPI farkındalığı
+- [ ] **T1.2** Oturum / masaüstü sınıflandırma (`WinSta0\Default` vs `exebox` vs `Winlogon`)
+- [ ] **T1.3** Geometri, `ImageMapping` (`pixel` / `norm1000` / zincirleme `zoom`) ve monitörler
+- [ ] **T1.4** Pencereler, süreç bütünlük düzeyi (`Integrity`) ve `tr_fold`
+- [ ] **T1.5** `doctor`, `service.Edm` iskeleti ve `fakes.py`
+- [ ] **Faz 1 Kapısı:** Kapı komutları yeşil + `Ortam` tablosu güncellendi → `git push origin main`
+
+## Faz 2 — Yakalama motoru ve gözlemler
+- [ ] **T2.1** GDI arka ucu (`mss`), boş kare tespiti ve `tests/live/target_app.py`
+- [ ] **T2.2** Örtülme hesabı, WGC (`windows-capture`), `PrintWindow` ve arka uç seçici (`Capturer`)
+- [ ] **T2.3** Gözlem deposu (`ObservationStore`), önizleme küçültme/JPEG basamakları, ızgara, zoom
+- [ ] **T2.4** `screenshot`, `zoom`, `list_monitors`, `list_windows` servis yöntemleri ve CLI
+- [ ] **L1** `test_gdi_pixel_colors`
+- [ ] **L2** `test_window_capture_size`
+- [ ] **L3** `test_occluded_window_uses_wgc_or_printwindow`
+- [ ] **Faz 2 Kapısı:** Kapı komutları yeşil; L1–L3 PASS veya `LIVE-PENDING` → `git push origin main`
+
+## Faz 3 — Eylem motoru ve güvenlik
+- [ ] **T3.1** Tuş/fare olay üretimi (`VkKeyScanW`, UTF-16 Unicode) ve `Win32InputSink`
+- [ ] **T3.2** `Guard` (oturum, UIPI tespiti, `Local\EDM_INPUT_LOCK` mutex)
+- [ ] **T3.3** `KillSwitch` (`Ctrl+Alt+Shift+F12` + `Local\EDM_ABORT` + `(0,0)` köşe kilidi)
+- [ ] **T3.4** Adresleme, `diff`, `check_stale` (24×24 yama), `wait_for_stable`, fare/klavye araçları
+- [ ] **T3.5** `window_action`, `launch` (`ShellExecuteExW` / Start Menu / AUMID), `wait_for`, `clipboard`
+- [ ] **T3.6** Çok adımlı `run_sequence` (ön doğrulama, max 25 adım, her adımda killswitch + stale)
+- [ ] **L4** `test_click_accuracy`
+- [ ] **L5** `test_click_norm1000_accuracy`
+- [ ] **L6** `test_type_unicode`
+- [ ] **L7** `test_drag_and_scroll`
+- [ ] **L9** `test_stale_after_move`
+- [ ] **L10** `test_killswitch_mid_sequence`
+- [ ] **Faz 3 Kapısı:** Kapı komutları yeşil; L4–L7, L9–L10 PASS veya `LIVE-PENDING` → `git push origin main`
+
+## Faz 4 — Algı: UIA, OCR, kullanıcı alıntısı
+- [ ] **T4.1** UIA öğe toplama (5 s zaman aşımı) ve Set-of-Mark (`marks`) numaralandırma
+- [ ] **T4.2** Çevrimdışı Windows OCR (`winrt-*`) ve Türkçe katlamalı metin arama (`find_text`)
+- [ ] **T4.3** Kullanıcı dikdörtgen alıntısı (`edm snip` + Tk donmuş ekran overlay)
+- [ ] **L2b** `test_uia_button_click`
+- [ ] **L8** `test_find_text_turkish`
+- [ ] **L11** `test_snip_driven_by_edm`
+- [ ] **Faz 4 Kapısı:** Kapı komutları yeşil; L2b, L8, L11 PASS veya `LIVE-PENDING` → `git push origin main`
+
+## Faz 5 — Arayüzler: CLI, MCP, entegrasyonlar
+- [ ] **T5.1** Tam CLI (`edm <subcommand>`, JSON stdout, çıkış kodları 0/1/2, 90 s bekçi)
+- [ ] **T5.2** MCP `stdio` sunucusu (20 sabit araç + `ImageContent`)
+- [ ] **T5.3** Kullanıcı başlatmalı loopback HTTP modu (`127.0.0.1` / `::1`, Bearer token, Origin kontrolü)
+- [ ] **T5.4** İstemci kılavuzları (Antigravity, Codex, Claude Code, Gemini CLI), `scripts/install.ps1` ve `SKILL.md`
+- [ ] **Faz 5 Kapısı:** Kapı komutları + `uv tool install --editable .` + `edm doctor` yeşil → `git push origin main`
+
+## Faz 6 — Kabul, belgeler, sürüm ve DUR
+- [ ] **T6.1** `scripts/run-live-acceptance.ps1`, kabul şablonu ve uygulama notları (`autocad`, `winrar`, `chrome`, `g-menu`)
+- [ ] **T6.2** `README.md` (EN), `README.tr.md` (TR), `CHANGELOG.md`, `SECURITY.md` güncellemesi
+- [ ] **T6.3** Sürüm etiketi (`v0.1.0` veya `v0.1.0-rc1`), `FINAL-REPORT.md`, `git push origin main --tags` → **DUR**
+
+## Gerçek Uygulama Doğrulama Matrisi (Kullanıcı Oturumunda)
+- [ ] **M1** AutoCAD (DirectX tuval + zoom ile küçük ikon)
+- [ ] **M2** WinRAR (UIA diyalog + CLI önceliği)
+- [ ] **M3** Chrome (OS dosya diyaloğu + DOM ayrımı)
+- [ ] **M4** AOC G-Menu (UIPI tespiti + yönetici EDM ile kontrol)
+- [ ] **M5** UAC / Kilit ekranı tespiti
+- [ ] **M6** %125 / %150 DPI ölçekleme doğruluğu
+- [ ] **M7** Türkçe klavye + pano geri yükleme
+
+## Günlük / Deneme Notları
+*(3 deneme kuralı kapsamındaki hipotezler ve faz özetleri buraya işlenir.)*

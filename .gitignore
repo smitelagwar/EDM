@@ -1,0 +1,38 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+.venv/
+venv/
+build/
+dist/
+eggs/
+.eggs/
+pip-wheel-metadata/
+
+# Test / lint / type caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Local EDM runtime artifacts (never commit user screenshots, logs, or tokens)
+observations/
+http-token
+config.local.toml
+*.local.json
+*.local.jsonl
+docs/acceptance/live-*.md
+
+# OS / Editors
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.tmp
+*.bak-*
